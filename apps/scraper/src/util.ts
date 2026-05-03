@@ -1,5 +1,7 @@
 // Shared regex/normalization helpers.
 
+import { createHash } from "node:crypto";
+
 const EMAIL_RE = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,24})/g;
 
 // Phone matching is intentionally permissive — we collect everything that
@@ -76,4 +78,29 @@ export function normalizeUrl(url: string): string {
   if (!url) return "";
   if (/^https?:\/\//i.test(url)) return url;
   return `https://${url.replace(/^\/+/, "")}`;
+}
+
+// Slug for sites/<slug>/. Stable per dedup key (so re-runs target the
+// same directory) and unique across the dataset (hash suffix prevents
+// collisions when two businesses share a name).
+export function siteSlug(name: string, key: string): string {
+  const base =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 30) || "biz";
+  const hash = createHash("sha1").update(key).digest("hex").slice(0, 6);
+  return `${base}-${hash}`;
+}
+
+// Resolve a possibly-relative href against a page URL. Returns "" on
+// invalid input rather than throwing — most callers want a best-effort
+// candidate list.
+export function resolveUrl(href: string, base: string): string {
+  try {
+    return new URL(href, base).toString();
+  } catch {
+    return "";
+  }
 }

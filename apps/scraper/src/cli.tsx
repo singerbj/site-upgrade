@@ -9,8 +9,10 @@ import type { QueueStats } from "./queue.ts";
 
 // CLI surface
 //   scraper --query="dentists in Austin TX" [--max=40] [--headful]
-//          [--no-lighthouse] [--no-ai] [--model=pixtral-large-latest]
-//          [--csv=path] [--data-dir=path]
+//          [--apex=example.com] [--no-lighthouse] [--no-ai]
+//          [--no-generation] [--no-evaluation]
+//          [--gen-concurrency=1] [--model=pixtral-large-latest]
+//          [--csv=path] [--claude-bin=claude]
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => {
     const [k, ...v] = a.replace(/^--/, "").split("=");
@@ -19,16 +21,17 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => {
 
 if (!args.query || args.query === "true") {
   console.error(
-    'Usage: scraper --query="dentists in Austin TX" [--max=40] [--headful] [--no-lighthouse] [--no-ai] [--model=pixtral-large-latest]',
+    'Usage: scraper --query="dentists in Austin TX" [--max=40] [--apex=example.com]\n' +
+      "         [--headful] [--no-lighthouse] [--no-ai] [--no-generation] [--no-evaluation]\n" +
+      "         [--gen-concurrency=1] [--model=pixtral-large-latest] [--csv=path] [--claude-bin=claude]",
   );
   process.exit(1);
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(HERE, "..");
-const dataDir = args["data-dir"]
-  ? resolve(args["data-dir"])
-  : resolve(PKG_ROOT, "data");
+const REPO_ROOT = resolve(PKG_ROOT, "..", "..");
+const dataDir = resolve(PKG_ROOT, "data");
 const csvPath = args.csv
   ? resolve(args.csv)
   : resolve(dataDir, "businesses.csv");
@@ -37,13 +40,18 @@ const opts = {
   query: args.query,
   maxResults: args.max ? Number.parseInt(args.max, 10) : 40,
   csvPath,
-  screenshotsDir: resolve(dataDir, "screenshots"),
-  crawlsDir: resolve(dataDir, "crawls"),
-  lighthouseDir: resolve(dataDir, "lighthouse"),
+  repoRoot: REPO_ROOT,
+  apex: args.apex && args.apex !== "true" ? args.apex : "example.com",
   headful: args.headful === "true",
   skipLighthouse: args["no-lighthouse"] === "true",
   skipAi: args["no-ai"] === "true",
+  skipGeneration: args["no-generation"] === "true",
+  skipEvaluation: args["no-evaluation"] === "true",
+  generateConcurrency: args["gen-concurrency"]
+    ? Number.parseInt(args["gen-concurrency"], 10)
+    : 1,
   aiModel: args.model,
+  claudeBin: args["claude-bin"],
 };
 
 interface RecentEntry {
@@ -65,6 +73,8 @@ interface State {
   crawl: QueueStats;
   lighthouse: QueueStats;
   ai: QueueStats;
+  generate: QueueStats;
+  evaluate: QueueStats;
   recent: RecentEntry[];
   errors: ErrorEntry[];
   finished: boolean;
@@ -85,6 +95,8 @@ function App() {
     crawl: initialQ,
     lighthouse: initialQ,
     ai: initialQ,
+    generate: initialQ,
+    evaluate: initialQ,
     recent: [],
     errors: [],
     finished: false,
@@ -112,6 +124,8 @@ function App() {
             next.crawl = e.crawl;
             next.lighthouse = e.lighthouse;
             next.ai = e.ai;
+            next.generate = e.generate;
+            next.evaluate = e.evaluate;
             break;
           case "item": {
             const head: RecentEntry = {
@@ -121,7 +135,7 @@ function App() {
               status: e.status,
               detail: e.detail,
             };
-            next.recent = [head, ...s.recent].slice(0, 10);
+            next.recent = [head, ...s.recent].slice(0, 12);
             if (e.status === "error") {
               next.errors = [
                 {
@@ -203,6 +217,8 @@ function App() {
         <QueueLine label="crawl     " stats={state.crawl} />
         <QueueLine label="lighthouse" stats={state.lighthouse} />
         <QueueLine label="mistral AI" stats={state.ai} />
+        <QueueLine label="generate  " stats={state.generate} />
+        <QueueLine label="evaluate  " stats={state.evaluate} />
       </Box>
       <Box marginTop={1} flexDirection="column">
         <Text bold>Recent activity</Text>
