@@ -57,5 +57,5 @@ console.log(`Created ${dest}`);
 console.log(`  package: @sites/${name}`);
 console.log(`  hostname: ${hostname}`);
 console.log(`\nNext steps:`);
-console.log(`  pnpm install`);
-console.log(`  pnpm --filter @sites/${name} dev`);
+console.log(`  npm install`);
+console.log(`  npm run dev -w @sites/${name}`);

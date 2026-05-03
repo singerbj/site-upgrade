@@ -3,14 +3,31 @@
 This repo hosts an arbitrary number of static SPAs on Cloudflare. You are
 expected to add new sites here freely. Follow the conventions below.
 
+## Stack (do not deviate)
+
+- **Vite** + React + TypeScript for every site
+- **oxlint** for linting, **oxfmt** for formatting
+- **better-npm-audit** for dependency security checks
+- **@tanstack/react-table** for tables
+- **@tanstack/react-query** for async/server state (NOT for client UI state)
+- **@tanstack/react-pacer** for debounce / throttle / rate limiting
+- **@tanstack/react-virtual** for virtualizing long lists
+- **Turborepo** for the monorepo
+- **npm** (workspaces) for the package manager - never pnpm or yarn
+- **GitHub Actions** for CI/CD
+- **Cloudflare Workers + R2** for hosting
+
+The TanStack libs are already installed in `sites/example/`, so any new site
+scaffolded from the template inherits them.
+
 ## Adding a new site
 
 Always use the scaffold script. It guarantees the package name and hostname
 field are wired up correctly, which is what the deploy workflow keys off of.
 
 ```bash
-pnpm new-site --name=<kebab-case> --hostname=<sub>.example.com --title="<Title>"
-pnpm install
+npm run new-site -- --name=<kebab-case> --hostname=<sub>.example.com --title="<Title>"
+npm install
 ```
 
 Then edit `sites/<name>/src/` like any Vite + React + TS project. The site
@@ -27,6 +44,9 @@ will deploy on the next push to `main`.
 - Do not add a per-site GitHub Actions workflow. The single root workflow
   fans out across all sites automatically.
 - Do not commit `node_modules`, `dist`, or `.turbo`.
+- Do not introduce a different package manager. Use npm.
+- Do not introduce a competing state library when react-query covers the
+  use case (server data, caching, retries, mutations).
 
 ## What lives where
 
@@ -44,17 +64,20 @@ On push to `main`:
 2. A matrix job builds + uploads each changed site to R2 in parallel.
 3. If `apps/worker/` changed, a separate job redeploys the worker.
 4. Touching shared root files (`scripts/`, `turbo.json`, `package.json`,
-   `pnpm-lock.yaml`, `tsconfig.base.json`) triggers a rebuild of EVERY
+   `package-lock.json`, `tsconfig.base.json`) triggers a rebuild of EVERY
    site, so be deliberate when modifying them.
 
 ## Local commands
 
 ```bash
-pnpm install                                  # install everything
-pnpm --filter @sites/<name> dev               # dev server for one site
-pnpm --filter @sites/<name> build             # build one site
-pnpm build                                    # build everything (cached)
-pnpm --filter site-router dev                 # run the worker locally
+npm install                                   # install everything
+npm run dev -w @sites/<name>                  # dev server for one site
+npm run build -w @sites/<name>                # build one site
+npm run build                                 # build everything (cached)
+npm run lint                                  # oxlint across the repo
+npm run format                                # oxfmt across the repo
+npm run audit                                 # better-npm-audit
+npm run dev -w site-router                    # run the worker locally
 ```
 
 ## Things to NOT do
@@ -66,3 +89,5 @@ pnpm --filter site-router dev                 # run the worker locally
 - Do not move or rename `sites/example/` - the scaffold script copies it.
 - Do not skip the scaffold script and hand-create site directories. You will
   forget the `site.hostname` field and CI will fail.
+- Do not swap oxlint/oxfmt for ESLint/Prettier. The whole point is the
+  faster oxc toolchain.

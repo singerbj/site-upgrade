@@ -15,8 +15,7 @@ const workerDir = "apps/worker";
 const sharedPaths = [
   "scripts/",
   "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
+  "package-lock.json",
   "turbo.json",
   "tsconfig.base.json",
   ".github/workflows/deploy.yml",
