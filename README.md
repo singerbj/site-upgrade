@@ -41,6 +41,7 @@ under a shared apex.
 ```
 apps/
   worker/                  Cloudflare router Worker
+  scraper/                 Lead pipeline: Google Maps -> crawl -> Lighthouse -> AI
 sites/
   example/                 Starter Vite + React + TS SPA (template)
 scripts/
