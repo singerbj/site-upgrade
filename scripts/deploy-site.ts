@@ -95,16 +95,33 @@ async function main() {
     const key = `${prefix}${rel}`;
     const body = await readFile(file);
     const ext = "." + (rel.split(".").pop() ?? "");
+    const contentType = MIME[ext];
+    const isHtml = contentType?.startsWith("text/html");
     await s3.send(
       new PutObjectCommand({
         Bucket: bucket,
         Key: key,
         Body: body,
-        ContentType: MIME[ext] ?? "application/octet-stream",
+        // Omit ContentType for unknown extensions so the worker's
+        // guessContentType fallback runs instead of serving octet-stream.
+        ContentType: contentType,
+        CacheControl: isHtml
+          ? "public, max-age=60, s-maxage=300"
+          : "public, max-age=31536000, immutable",
       }),
     );
     uploaded.add(key);
     console.log(`  uploaded ${key} (${body.length} bytes)`);
+  }
+
+  // Safety: refuse to prune R2 if the build produced no index.html. This
+  // catches the "wrong --dir" / "vite build silently failed" footgun before
+  // it wipes the live site.
+  if (!uploaded.has(`${prefix}index.html`)) {
+    throw new Error(
+      `Refusing to deploy: ${dir} produced no index.html. ` +
+        `Aborting before pruning R2 (${uploaded.size} files staged).`,
+    );
   }
 
   const existing = await listExistingKeys(prefix);
