@@ -10,10 +10,11 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "typecheck": "turbo run typecheck",
     "lint": "oxlint",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "audit": "better-npm-audit audit --level moderate",
+    "audit": "better-npm-audit audit --level high",
     "deploy:worker": "npm run deploy -w site-router",
     "deploy:site": "node --experimental-strip-types scripts/deploy-site.ts",
     "new-site": "node --experimental-strip-types scripts/new-site.ts",
@@ -29,5 +30,6 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "packageManager": "npm@10.9.7"
 }

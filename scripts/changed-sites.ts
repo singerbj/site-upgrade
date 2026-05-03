@@ -32,9 +32,7 @@ function listSiteDirs(): string[] {
   if (!existsSync(sitesDir)) return [];
   return readdirSync(sitesDir).filter((d) => {
     const p = join(sitesDir, d);
-    return (
-      statSync(p).isDirectory() && existsSync(join(p, "package.json"))
-    );
+    return statSync(p).isDirectory() && existsSync(join(p, "package.json"));
   });
 }
 
@@ -47,7 +45,9 @@ function readSite(dirName: string): Site {
     );
   }
   if (!pkg.name) {
-    throw new Error(`sites/${dirName}/package.json is missing the "name" field`);
+    throw new Error(
+      `sites/${dirName}/package.json is missing the "name" field`,
+    );
   }
   return {
     name: dirName,
@@ -80,8 +80,7 @@ if (!baseSha || baseSha === ZERO_SHA) {
 }
 
 const sharedChanged =
-  allChanged ||
-  changed.some((f) => sharedPaths.some((p) => f.startsWith(p)));
+  allChanged || changed.some((f) => sharedPaths.some((p) => f.startsWith(p)));
 
 const allSites = listSiteDirs();
 const siteNames = sharedChanged

@@ -9,12 +9,10 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 
 // Args: --hostname=site-a.example.com --dir=./dist
-const args = Object.fromEntries(
-  process.argv.slice(2).map((a) => {
+const args = Object.fromEntries(process.argv.slice(2).map((a) => {
     const [k, ...v] = a.replace(/^--/, "").split("=");
     return [k, v.join("=")];
-  }),
-);
+  }));
 
 const hostname = args.hostname;
 const dir = args.dir ?? "./dist";

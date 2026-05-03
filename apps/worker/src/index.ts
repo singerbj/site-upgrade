@@ -5,7 +5,11 @@ export interface Env {
 const HTML_TYPES = new Set(["text/html", "application/xhtml+xml"]);
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(
+    request: Request,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<Response> {
     const url = new URL(request.url);
     const host = (request.headers.get("host") ?? "").toLowerCase();
 
@@ -19,7 +23,9 @@ export default {
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
 
-    const path = url.pathname.endsWith("/") ? `${url.pathname}index.html` : url.pathname;
+    const path = url.pathname.endsWith("/")
+      ? `${url.pathname}index.html`
+      : url.pathname;
     const key = `${host}${path}`;
 
     let object = await env.SITES.get(key);
@@ -36,7 +42,8 @@ export default {
       return new Response("Not found", { status: 404 });
     }
 
-    const contentType = object.httpMetadata?.contentType ?? guessContentType(path);
+    const contentType =
+      object.httpMetadata?.contentType ?? guessContentType(path);
     const isHtml = HTML_TYPES.has(contentType.split(";")[0]);
 
     const headers = new Headers();

@@ -4,12 +4,10 @@
 // CNAME target shown in the output.
 //
 // Usage: node --experimental-strip-types scripts/add-domain.ts --hostname=acme.com
-const args = Object.fromEntries(
-  process.argv.slice(2).map((a) => {
+const args = Object.fromEntries(process.argv.slice(2).map((a) => {
     const [k, ...v] = a.replace(/^--/, "").split("=");
     return [k, v.join("=")];
-  }),
-);
+  }));
 
 const hostname = args.hostname;
 const zoneId = process.env.CF_ZONE_ID;
@@ -41,7 +39,10 @@ const res = await fetch(
   },
 );
 
-const body = (await res.json()) as { result?: { id: string; hostname: string; status: string }; errors?: unknown };
+const body = (await res.json()) as {
+  result?: { id: string; hostname: string; status: string };
+  errors?: unknown;
+};
 if (!res.ok) {
   console.error(body);
   process.exit(1);

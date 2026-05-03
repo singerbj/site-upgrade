@@ -3,16 +3,14 @@
 // package name, hostname, and HTML title.
 //
 // Usage:
-//   pnpm new-site --name=blog --hostname=blog.example.com [--title="My Blog"]
+//   npm run new-site -- --name=blog --hostname=blog.example.com [--title="My Blog"]
 import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const args = Object.fromEntries(
-  process.argv.slice(2).map((a) => {
+const args = Object.fromEntries(process.argv.slice(2).map((a) => {
     const [k, ...v] = a.replace(/^--/, "").split("=");
     return [k, v.join("=")];
-  }),
-);
+  }));
 
 const name = args.name;
 const hostname = args.hostname;
@@ -24,7 +22,9 @@ if (!name || !hostname) {
 }
 
 if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
-  console.error("--name must be kebab-case (lowercase letters, digits, hyphens)");
+  console.error(
+    "--name must be kebab-case (lowercase letters, digits, hyphens)",
+  );
   process.exit(1);
 }
 
