@@ -636,7 +636,7 @@ export class Pipeline {
         status: "start",
       });
 
-      let server: ReturnType<typeof serveStatic> | undefined;
+      let server: Awaited<ReturnType<typeof serveStatic>> | undefined;
       try {
         const build = await buildSite(this.opts.repoRoot, paths.packageName);
         if (!build.ok) {
@@ -646,7 +646,7 @@ export class Pipeline {
         }
 
         const distDir = resolve(paths.siteDir, "dist");
-        server = serveStatic(distDir);
+        server = await serveStatic(distDir);
         const url = `http://127.0.0.1:${EVALUATE_PORT}/`;
 
         // Screenshot the new site + capture its SEO snapshot in one

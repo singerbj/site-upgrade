@@ -123,20 +123,29 @@
 
       const rows = data.metrics || [];
       for (const m of rows) {
+        const hasOld = m.old != null && m.old !== "";
+        const hasNew = m.new != null && m.new !== "";
+        // Skip rows with no data on either side — keeps the card focused
+        // on metrics that actually demonstrate a delta.
+        if (!hasOld && !hasNew) continue;
         const r = document.createElement("div");
         r.className = "row";
         const oldStr = formatVal(m.old, m.scale);
         const newStr = formatVal(m.new, m.scale);
-        const deltaCls = m.delta > 0 ? "up" : m.delta < 0 ? "down" : "flat";
-        const deltaSign = m.delta > 0 ? "+" : "";
+        // Only render the delta chip when both sides have a number;
+        // otherwise we'd show a misleading "+0" against an empty old.
+        let deltaHtml = "";
+        if (hasOld && hasNew) {
+          const cls = m.delta > 0 ? "up" : m.delta < 0 ? "down" : "flat";
+          const sign = m.delta > 0 ? "+" : "";
+          deltaHtml = `<span class="delta ${cls}">${sign}${m.delta}</span>`;
+        }
         r.innerHTML = `
           <span class="label">${escape(m.label)}</span>
           <span class="nums">
             <span class="old">${oldStr}</span>
             <span class="new">${newStr}</span>
-            <span class="delta ${deltaCls}">${deltaSign}${m.delta}${
-              m.scale === "10" ? "" : ""
-            }</span>
+            ${deltaHtml}
           </span>
         `;
         card.appendChild(r);

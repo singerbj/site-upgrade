@@ -28,8 +28,8 @@ export function renderBrief(ctx: BriefContext): string {
   const oldQuality = rec.ai_quality_score || "(not measured)";
   const oldSeo = rec.seo_score || "(not measured)";
   const oldAeo = rec.aeo_score || "(not measured)";
-  const oldSeoSummary = rec.seo_summary || "";
-  const oldAeoSummary = rec.aeo_summary || "";
+  const oldSeoSummary = rec.seo_summary || "(not measured)";
+  const oldAeoSummary = rec.aeo_summary || "(not measured)";
   const oldFeatures = rec.ai_features || "(not detected)";
   const oldSummary = rec.ai_summary || "(not generated)";
 

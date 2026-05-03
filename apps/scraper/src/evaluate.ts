@@ -10,7 +10,6 @@ import {
 import { createServer, type Server } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
 import type { BusinessRecord } from "./types.ts";
 
 // Build + serve + screenshot the generated site so the existing
@@ -97,7 +96,13 @@ export async function buildSite(
 
 // Tiny static server. SPA fallback: any path that doesn't resolve to a
 // file falls back to /index.html so client-side routing still works.
-export function serveStatic(root: string, port: number = SERVE_PORT): Server {
+// Resolves only once the socket is actually bound, and rejects on bind
+// errors (EADDRINUSE etc) so the orchestrator handles them as run errors
+// instead of surfacing an unhandled exception.
+export function serveStatic(
+  root: string,
+  port: number = SERVE_PORT,
+): Promise<Server> {
   const server = createServer((req, res) => {
     if (!req.url) {
       res.statusCode = 400;
@@ -130,34 +135,35 @@ export function serveStatic(root: string, port: number = SERVE_PORT): Server {
     res.setHeader("Cache-Control", "no-store");
     createReadStream(filePath).pipe(res);
   });
-  server.listen(port, "127.0.0.1");
-  return server;
+
+  return new Promise<Server>((res, rej) => {
+    const onError = (err: Error) => {
+      server.removeListener("listening", onListening);
+      rej(err);
+    };
+    const onListening = () => {
+      server.removeListener("error", onError);
+      res(server);
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(port, "127.0.0.1");
+  });
 }
 
 export function stopServer(server: Server): Promise<void> {
   return new Promise((res) => {
-    server.close(() => res());
-    // server.close waits for open keep-alives; force-close as a backstop.
-    setTimeout(() => res(), 1_000);
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      res();
+    };
+    server.close(() => finish());
+    // Backstop: server.close() waits for open keep-alives; cap at 1s so
+    // the orchestrator isn't blocked by a hung browser connection.
+    setTimeout(finish, 1_000);
   });
-}
-
-export async function screenshotNewSite(
-  url: string,
-  outPath: string,
-): Promise<void> {
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({
-    viewport: { width: 1366, height: 900 },
-  });
-  try {
-    const page = await context.newPage();
-    await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
-    await page.screenshot({ path: outPath, fullPage: false, type: "png" });
-  } finally {
-    await context.close().catch(() => {});
-    await browser.close().catch(() => {});
-  }
 }
 
 export const EVALUATE_PORT = SERVE_PORT;
