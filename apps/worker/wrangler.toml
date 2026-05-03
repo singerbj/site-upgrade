@@ -1,0 +1,23 @@
+# Cloudflare router Worker. Replace `example.com` with your apex domain
+# and `YOUR_ACCOUNT_ID` with your Cloudflare account id before deploying.
+name = "site-router"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+account_id = "YOUR_ACCOUNT_ID"
+
+[observability]
+enabled = true
+
+[[r2_buckets]]
+binding = "SITES"
+bucket_name = "sites"
+
+# Catch every subdomain of the apex.
+[[routes]]
+pattern = "*example.com/*"
+zone_name = "example.com"
+
+# Serve the apex itself too.
+[[routes]]
+pattern = "example.com/*"
+zone_name = "example.com"
