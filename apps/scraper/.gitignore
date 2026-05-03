@@ -1,0 +1,4 @@
+data/screenshots/
+data/crawls/
+data/lighthouse/
+*.lock
