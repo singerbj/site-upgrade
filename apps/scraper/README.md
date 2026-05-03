@@ -9,18 +9,28 @@ End-to-end lead pipeline. Given a Google Maps search query, it:
    extracts every email and phone, pulls logo candidates (header / nav
    imagery, `og:image`, favicon), saves the homepage screenshot, and
    dumps all visible copy.
-3. **Runs Lighthouse** against the homepage for performance,
+3. **Captures an SEO snapshot** of the homepage (title, meta tags,
+   Open Graph / Twitter cards, headings, JSON-LD schema, alt-text
+   coverage, link counts) for grounded AI scoring later.
+4. **Runs Lighthouse** against the homepage for performance,
    accessibility, best-practices, and SEO scores.
-4. **Scores the design and quality** of the homepage with the AI SDK +
-   Mistral (`pixtral-large-latest`, vision-capable) using the screenshot.
-5. **Generates a redesigned site** by scaffolding `sites/<slug>/` from
-   `sites/example/`, writing a `BRIEF.md` with the captured context and
-   the targets to beat, then invoking Claude Code as a subprocess to
-   build the new React + Vite + TS site in that directory.
-6. **Evaluates the generated site** by building it, serving the `dist/`
-   on a local loopback port, screenshotting it, re-running Lighthouse,
-   and re-scoring the design with the same vision model — so the CSV
-   has before/after numbers for every metric.
+5. **Scores the design, quality, SEO, and AEO** of the homepage with
+   Mistral (`pixtral-large-latest`, vision-capable) using the
+   screenshot, the visible copy, and the structured SEO snapshot.
+   Design + quality are 1-10; SEO + AEO are 0-100.
+6. **Generates a redesigned site** by scaffolding `sites/<slug>/` from
+   `sites/example/`, writing a `BRIEF.md` with the captured context
+   and every score to beat, then invoking Claude Code as a subprocess
+   to build the new React + Vite + TS site.
+7. **Evaluates the generated site** by building it, serving `dist/`
+   on a local loopback port, capturing a new SEO snapshot, re-running
+   Lighthouse, and re-scoring with the same vision model — so the CSV
+   has before/after numbers for every metric (Performance,
+   Accessibility, Best Practices, SEO, AEO, Design, Quality).
+8. **Installs a tamper-proof comparison overlay** into the deployed
+   `dist/`. A vanilla-JS Shadow DOM widget reads `/comparison.json` at
+   runtime and shows old → new score deltas to anyone visiting the
+   demo site, so the prospect sees the value before they sign.
 
 Everything lands in `data/businesses.csv` — the source of truth, committed
 to source control. Re-running the same query is safe: rows already in the
@@ -41,12 +51,17 @@ sites/<slug>/
   GENERATION_SUMMARY.md       # written by Claude Code at end of session
   .assets/
     old-screenshot.png        # existing homepage
-    new-screenshot.png        # generated site homepage
+    new-screenshot.png        # generated site homepage (pre-overlay)
     copy.txt                  # all visible copy from the existing site
     logos/                    # logo candidates downloaded from the site
     pages/all-pages.html      # raw HTML of every crawled page
+    seo-snapshot.json         # head metadata + headings + schema (existing)
+    new-seo-snapshot.json     # same shape, captured against the new build
     lighthouse/old.json       # report against the existing site
     lighthouse/new.json       # report against the generated site
+  dist/                       # produced by build; gitignored at repo root
+    comparison.json           # injected post-build; the overlay reads this
+    upgrade-overlay.js        # injected post-build; tamper-proof overlay
 ```
 
 Slug is `<kebab-name>-<6-hex>` derived from the business name + a hash of
@@ -141,10 +156,11 @@ Identity + Maps fields, then per-stage status + outputs:
 ```
 site_dir, site_slug, site_hostname,
 crawl_status, crawl_pages, crawl_emails, crawl_phones,
-screenshot_path, copy_path, logo_paths,
+screenshot_path, copy_path, logo_paths, seo_snapshot_path,
 lighthouse_status, lighthouse_performance, lighthouse_accessibility,
 lighthouse_best_practices, lighthouse_seo,
 ai_status, ai_design_score, ai_quality_score, ai_features, ai_summary,
+seo_score, seo_summary, aeo_score, aeo_summary,
 brief_path, generation_status, generation_summary,
 new_screenshot_path,
 new_lighthouse_status, new_lighthouse_performance,
@@ -152,12 +168,49 @@ new_lighthouse_accessibility, new_lighthouse_best_practices,
 new_lighthouse_seo,
 new_ai_status, new_ai_design_score, new_ai_quality_score,
 new_ai_features, new_ai_summary,
-error
+new_seo_score, new_seo_summary, new_aeo_score, new_aeo_summary,
+comparison_path, error
 ```
 
-Sort the CSV by `new_lighthouse_performance` minus
-`lighthouse_performance` (or the AI design delta) to surface the biggest
-wins.
+Sort by any `new_*` score minus its `*` counterpart (or the AI design /
+SEO / AEO deltas) to surface the biggest wins for outreach.
+
+## Score scales
+
+| Metric | Scale | Source |
+|---|---|---|
+| `lighthouse_performance` etc | 0-100 | Lighthouse audit |
+| `ai_design_score`, `ai_quality_score` | 1-10 | Mistral pixtral vision pass |
+| `seo_score`, `aeo_score` | 0-100 | Mistral pixtral with structured SEO snapshot grounding |
+
+Two SEO numbers exist on purpose: `lighthouse_seo` is the mechanical
+audit (has title? has meta description? mobile-friendly?), while
+`seo_score` is the holistic AI take (does the metadata actually target
+search intent? is the JSON-LD relevant? is the heading outline coherent?).
+`aeo_score` measures how cite-friendly the page is for LLM-driven search
+(Perplexity / ChatGPT / AI Overviews) — clear factual statements, FAQ
+schema, semantic HTML, an extractable About paragraph.
+
+## Comparison overlay
+
+After evaluation finishes, the pipeline writes two files into the
+new site's `dist/`:
+
+- `dist/comparison.json` — the before/after data shape.
+- `dist/upgrade-overlay.js` — a self-contained vanilla-JS Shadow DOM
+  widget shipped from `apps/scraper/templates/upgrade-overlay.js`.
+
+It also injects `<script src="/upgrade-overlay.js" defer
+data-site-upgrade-overlay></script>` before `</body>` in
+`dist/index.html`. The overlay sits at the bottom-right of the page,
+shows old → new deltas for every metric, can be minimized or dismissed
+for the session, and uses Shadow DOM so the host page's CSS can't break
+it. It loads asynchronously and degrades silently if `comparison.json`
+is missing.
+
+The overlay is intentionally not part of the React tree — it's
+post-processed into `dist/` so even if Claude Code rewrote everything,
+the demo still ships with the comparison widget.
 
 ## Caveats
 

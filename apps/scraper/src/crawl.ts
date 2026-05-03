@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { type Browser, chromium } from "playwright";
+import { extractSeoSnapshot, writeSnapshot } from "./seo-snapshot.ts";
 import {
   extractEmails,
   extractPhones,
@@ -23,6 +24,7 @@ export interface CrawlResult {
   screenshotPath: string;
   copyPath: string;
   logoPaths: string[];
+  seoSnapshotPath: string;
 }
 
 const PRIORITY_PATHS = [
@@ -93,6 +95,7 @@ export async function crawlSite(
 
   const screenshotPath = join(assetsDir, "old-screenshot.png");
   const copyPath = join(assetsDir, "copy.txt");
+  const seoSnapshotPath = join(assetsDir, "seo-snapshot.json");
 
   const browser: Browser = await chromium.launch({ headless: true });
   // Use Playwright's default desktop Chromium UA — small business sites
@@ -134,6 +137,12 @@ export async function crawlSite(
       const abs = resolveUrl(c.url, page.url());
       if (abs && !logoCandidates.has(abs)) logoCandidates.set(abs, c.hint);
     }
+
+    // SEO snapshot from the homepage. Captured here (while we have the
+    // page open) so the AI assessor doesn't have to re-extract it from
+    // the screenshot.
+    const seoSnapshot = await extractSeoSnapshot(page).catch(() => null);
+    if (seoSnapshot) writeSnapshot(seoSnapshot, seoSnapshotPath);
 
     // Discover internal links on the homepage.
     const links: string[] = await page
@@ -226,6 +235,7 @@ export async function crawlSite(
       screenshotPath,
       copyPath,
       logoPaths,
+      seoSnapshotPath,
     };
   } finally {
     await context.close().catch(() => {});

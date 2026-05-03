@@ -34,6 +34,7 @@ export interface BusinessRecord {
   screenshot_path: string;
   copy_path: string;
   logo_paths: string;
+  seo_snapshot_path: string;
 
   // Lighthouse on the existing site
   lighthouse_status: StageStatus | "";
@@ -42,12 +43,18 @@ export interface BusinessRecord {
   lighthouse_best_practices: string;
   lighthouse_seo: string;
 
-  // AI assessment of the existing site
+  // AI assessment of the existing site (design + quality + SEO + AEO).
+  // ai_design_score / ai_quality_score are 1-10. seo_score / aeo_score
+  // are 0-100 to match Lighthouse-style scales.
   ai_status: StageStatus | "";
   ai_design_score: string;
   ai_quality_score: string;
   ai_features: string;
   ai_summary: string;
+  seo_score: string;
+  seo_summary: string;
+  aeo_score: string;
+  aeo_summary: string;
 
   // Generation: scaffold + Claude Code -> a new React site for this business
   brief_path: string;
@@ -66,6 +73,11 @@ export interface BusinessRecord {
   new_ai_quality_score: string;
   new_ai_features: string;
   new_ai_summary: string;
+  new_seo_score: string;
+  new_seo_summary: string;
+  new_aeo_score: string;
+  new_aeo_summary: string;
+  comparison_path: string;
 
   // Last error encountered (any stage). Per-stage status carries error
   // markers; this is just the most recent message for quick scanning.
@@ -97,6 +109,7 @@ export const FIELDS: (keyof BusinessRecord)[] = [
   "screenshot_path",
   "copy_path",
   "logo_paths",
+  "seo_snapshot_path",
   "lighthouse_status",
   "lighthouse_performance",
   "lighthouse_accessibility",
@@ -107,6 +120,10 @@ export const FIELDS: (keyof BusinessRecord)[] = [
   "ai_quality_score",
   "ai_features",
   "ai_summary",
+  "seo_score",
+  "seo_summary",
+  "aeo_score",
+  "aeo_summary",
   "brief_path",
   "generation_status",
   "generation_summary",
@@ -121,6 +138,11 @@ export const FIELDS: (keyof BusinessRecord)[] = [
   "new_ai_quality_score",
   "new_ai_features",
   "new_ai_summary",
+  "new_seo_score",
+  "new_seo_summary",
+  "new_aeo_score",
+  "new_aeo_summary",
+  "comparison_path",
   "error",
 ];
 

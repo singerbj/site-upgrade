@@ -1,12 +1,14 @@
 import { mkdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
+import { chromium } from "playwright";
 import { assessSite } from "./ai.ts";
 import { crawlSite } from "./crawl.ts";
 import { CsvStore, dedupKey } from "./csv.ts";
 import {
   EVALUATE_PORT,
+  buildComparison,
   buildSite,
-  screenshotNewSite,
+  installOverlay,
   serveStatic,
   stopServer,
 } from "./evaluate.ts";
@@ -14,6 +16,12 @@ import { runClaudeCode, scaffoldSite, writeBrief } from "./generate.ts";
 import { type ScrapedListing, scrapeGoogleMaps } from "./google-maps.ts";
 import { runLighthouse } from "./lighthouse.ts";
 import { Queue, type QueueStats } from "./queue.ts";
+import {
+  type SeoSnapshot,
+  extractSeoSnapshot,
+  snapshotToPrompt,
+  writeSnapshot,
+} from "./seo-snapshot.ts";
 import { joinList, normalizeUrl, siteSlug } from "./util.ts";
 
 // The orchestrator wires six stages together with concurrency tuned to
@@ -84,6 +92,8 @@ interface SitePaths {
   newScreenshot: string;
   copyPath: string;
   briefPath: string;
+  oldSeoSnapshot: string;
+  newSeoSnapshot: string;
   hostname: string;
   slug: string;
   packageName: string;
@@ -303,6 +313,8 @@ export class Pipeline {
       newScreenshot: join(assetsDir, "new-screenshot.png"),
       copyPath: join(assetsDir, "copy.txt"),
       briefPath: join(siteDir, "BRIEF.md"),
+      oldSeoSnapshot: join(assetsDir, "seo-snapshot.json"),
+      newSeoSnapshot: join(assetsDir, "new-seo-snapshot.json"),
       hostname,
       slug,
       packageName: `@sites/${slug}`,
@@ -341,6 +353,7 @@ export class Pipeline {
           screenshot_path: this.rel(result.screenshotPath),
           copy_path: this.rel(result.copyPath),
           logo_paths: joinList(result.logoPaths.map((p) => this.rel(p))),
+          seo_snapshot_path: this.rel(result.seoSnapshotPath),
         });
         await this.store.flush();
         this.emit({
@@ -463,9 +476,19 @@ export class Pipeline {
         } catch {
           contextText = listing.name ?? "";
         }
+        let seoPrompt = "";
+        try {
+          const snap = JSON.parse(
+            readFileSync(paths.oldSeoSnapshot, "utf8"),
+          ) as SeoSnapshot;
+          seoPrompt = snapshotToPrompt(snap);
+        } catch {
+          // No snapshot — assess from screenshot + text only.
+        }
         const out = await assessSite({
           screenshotPath,
           contextText,
+          seoPrompt,
           model: this.opts.aiModel,
         });
         this.store.upsert(key, {
@@ -474,6 +497,10 @@ export class Pipeline {
           ai_quality_score: String(out.quality_score),
           ai_features: joinList(out.features),
           ai_summary: out.summary,
+          seo_score: String(out.seo_score),
+          seo_summary: out.seo_summary,
+          aeo_score: String(out.aeo_score),
+          aeo_summary: out.aeo_summary,
         });
         await this.store.flush();
         this.emit({
@@ -622,8 +649,29 @@ export class Pipeline {
         server = serveStatic(distDir);
         const url = `http://127.0.0.1:${EVALUATE_PORT}/`;
 
-        // Screenshot the new site for the design-score AI pass.
-        await screenshotNewSite(url, paths.newScreenshot);
+        // Screenshot the new site + capture its SEO snapshot in one
+        // browser session. We do this before the post-build overlay
+        // injection so the overlay isn't included in the new screenshot
+        // (which would skew the AI design score).
+        let newSnapshot: SeoSnapshot | null = null;
+        const browser = await chromium.launch({ headless: true });
+        try {
+          const ctx = await browser.newContext({
+            viewport: { width: 1366, height: 900 },
+          });
+          const page = await ctx.newPage();
+          await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
+          await page.screenshot({
+            path: paths.newScreenshot,
+            fullPage: false,
+            type: "png",
+          });
+          newSnapshot = await extractSeoSnapshot(page).catch(() => null);
+          await ctx.close();
+        } finally {
+          await browser.close().catch(() => {});
+        }
+        if (newSnapshot) writeSnapshot(newSnapshot, paths.newSeoSnapshot);
         this.store.upsert(key, {
           new_screenshot_path: this.rel(paths.newScreenshot),
         });
@@ -648,6 +696,7 @@ export class Pipeline {
             const out = await assessSite({
               screenshotPath: paths.newScreenshot,
               contextText: rec.ai_summary,
+              seoPrompt: newSnapshot ? snapshotToPrompt(newSnapshot) : "",
               model: this.opts.aiModel,
             });
             this.store.upsert(key, {
@@ -656,10 +705,36 @@ export class Pipeline {
               new_ai_quality_score: String(out.quality_score),
               new_ai_features: joinList(out.features),
               new_ai_summary: out.summary,
+              new_seo_score: String(out.seo_score),
+              new_seo_summary: out.seo_summary,
+              new_aeo_score: String(out.aeo_score),
+              new_aeo_summary: out.aeo_summary,
             });
           });
         } else {
           this.store.upsert(key, { new_ai_status: "skipped" });
+        }
+
+        // Install the comparison overlay into dist/ now that every old
+        // and new score is known. Subsequent deploys ship dist/ as-is,
+        // so the overlay rides along without further intervention.
+        try {
+          const finalRec = this.store.get(key);
+          if (finalRec) {
+            const data = buildComparison(finalRec);
+            const out = installOverlay(distDir, data);
+            this.store.upsert(key, {
+              comparison_path: this.rel(out.comparisonPath),
+            });
+          }
+        } catch (err) {
+          this.emit({
+            type: "log",
+            level: "warn",
+            message: `overlay install failed: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          });
         }
 
         await this.store.flush();

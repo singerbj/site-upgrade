@@ -23,9 +23,13 @@ export function renderBrief(ctx: BriefContext): string {
   const oldPerf = rec.lighthouse_performance || "(not measured)";
   const oldA11y = rec.lighthouse_accessibility || "(not measured)";
   const oldBest = rec.lighthouse_best_practices || "(not measured)";
-  const oldSeo = rec.lighthouse_seo || "(not measured)";
+  const oldLhSeo = rec.lighthouse_seo || "(not measured)";
   const oldDesign = rec.ai_design_score || "(not measured)";
   const oldQuality = rec.ai_quality_score || "(not measured)";
+  const oldSeo = rec.seo_score || "(not measured)";
+  const oldAeo = rec.aeo_score || "(not measured)";
+  const oldSeoSummary = rec.seo_summary || "";
+  const oldAeoSummary = rec.aeo_summary || "";
   const oldFeatures = rec.ai_features || "(not detected)";
   const oldSummary = rec.ai_summary || "(not generated)";
 
@@ -73,13 +77,19 @@ ${logosBlock}
 | Lighthouse performance | ${oldPerf} | ≥ 95 and strictly higher than existing |
 | Lighthouse accessibility | ${oldA11y} | ≥ 95 and strictly higher than existing |
 | Lighthouse best-practices | ${oldBest} | ≥ 95 |
-| Lighthouse SEO | ${oldSeo} | ≥ 95 |
+| Lighthouse SEO | ${oldLhSeo} | ≥ 95 |
+| AI SEO score (0-100) | ${oldSeo} | strictly higher |
+| AI AEO score (0-100) | ${oldAeo} | strictly higher |
 | AI design score (1-10) | ${oldDesign} | strictly higher |
 | AI quality score (1-10) | ${oldQuality} | strictly higher |
 
-The pipeline will build your output, run Lighthouse against it, and
-re-score the design with the same vision model that scored the original.
-Optimize for those measurements, not for what looks impressive in code.
+The pipeline will build your output, run Lighthouse against it, capture
+a fresh SEO snapshot, and re-score everything (design, quality, SEO,
+AEO) with the same vision model that scored the original. Optimize
+for those measurements, not for what looks impressive in code.
+
+Existing-site SEO gap: ${oldSeoSummary}
+Existing-site AEO gap: ${oldAeoSummary}
 
 ## Features the existing site has — preserve all of them
 
@@ -117,6 +127,30 @@ Existing-site summary from the auditor: ${oldSummary}
    and provide width/height to avoid CLS. Tree-shake everything.
 7. **Build cleanly.** \`npm run build -w @sites/${rec.site_slug}\` from the
    repo root must succeed and produce a working \`dist/\`.
+8. **SEO essentials.** Set a unique, specific \`<title>\` (50-60 chars)
+   and \`<meta name="description">\` (~150 chars). Include
+   \`<link rel="canonical">\`, \`<meta name="viewport">\`, \`<html lang>\`,
+   Open Graph + Twitter card tags, and a JSON-LD \`LocalBusiness\` (or
+   appropriate schema) block in \`index.html\` populated with the
+   business's NAP (name, address, phone). Use a single descriptive H1
+   and a sensible H2 outline. Every \`<img>\` needs alt text.
+9. **AEO essentials.** Write the homepage to be cite-friendly: a
+   one-paragraph "what we do / where / for whom" summary, an explicit
+   FAQ section with question-style H3s, and a JSON-LD \`FAQPage\` block
+   mirroring those questions. Use plain language statements over
+   marketing copy. State the service area, hours, price ranges, and
+   accepted payment methods if known.
+
+## Comparison overlay (do not implement)
+
+The pipeline injects a tamper-proof comparison overlay into \`dist/\`
+post-build, plus a \`dist/comparison.json\` data file. It loads via a
+single \`<script src="/upgrade-overlay.js" defer>\` tag appended before
+\`</body>\`. Do not add this script tag yourself — the pipeline does it.
+Do not write a \`comparison.json\` or a \`upgrade-overlay.js\` of your
+own. Plan layout so the bottom-right ~340×220px area can hold a small
+floating card without colliding with the cookie banner that pushes
+content up from the bottom.
 
 ## Branding direction
 

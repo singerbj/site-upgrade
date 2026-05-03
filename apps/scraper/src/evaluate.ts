@@ -1,8 +1,17 @@
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  createReadStream,
+  existsSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, type Server } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import type { BusinessRecord } from "./types.ts";
 
 // Build + serve + screenshot the generated site so the existing
 // Lighthouse and AI scoring code can run against it. We deliberately
@@ -152,3 +161,136 @@ export async function screenshotNewSite(
 }
 
 export const EVALUATE_PORT = SERVE_PORT;
+
+// ---------------------------------------------------------------------------
+// Comparison overlay injection
+// ---------------------------------------------------------------------------
+//
+// Sales-facing overlay that shows old vs new scores on the deployed site.
+// Implemented as a vanilla-JS Shadow DOM widget shipped in the package's
+// templates/. We post-process the dist/ output rather than hand the
+// component to Claude Code so the overlay is tamper-proof: even if Claude
+// rewrites src/App.tsx to do something exotic, the overlay still runs.
+//
+// Steps:
+//   1. Copy templates/upgrade-overlay.js -> dist/upgrade-overlay.js
+//   2. Write dist/comparison.json with the per-business numbers.
+//   3. Inject `<script src="/upgrade-overlay.js" defer></script>` into
+//      dist/index.html if not already present.
+
+const HERE_FILE = fileURLToPath(import.meta.url);
+const TEMPLATES_DIR = resolve(HERE_FILE, "..", "..", "templates");
+const OVERLAY_TEMPLATE = resolve(TEMPLATES_DIR, "upgrade-overlay.js");
+const OVERLAY_SCRIPT_TAG =
+  '<script src="/upgrade-overlay.js" defer data-site-upgrade-overlay></script>';
+
+export interface ComparisonData {
+  business: { name: string; slug: string; hostname: string };
+  generated_at: string;
+  old_url: string;
+  old_summary: string;
+  new_summary: string;
+  metrics: Array<{
+    label: string;
+    old: number | "" | null;
+    new: number | "" | null;
+    delta: number;
+    scale: "100" | "10";
+  }>;
+}
+
+function num(s: string): number | "" {
+  if (!s) return "";
+  const n = Number.parseFloat(s);
+  return Number.isFinite(n) ? n : "";
+}
+
+function delta(a: number | "", b: number | ""): number {
+  if (a === "" || b === "") return 0;
+  return Math.round((b - a) * 10) / 10;
+}
+
+export function buildComparison(rec: BusinessRecord): ComparisonData {
+  const m = (
+    label: string,
+    oldField: keyof BusinessRecord,
+    newField: keyof BusinessRecord,
+    scale: "100" | "10",
+  ) => {
+    const o = num(rec[oldField] as string);
+    const n = num(rec[newField] as string);
+    return { label, old: o, new: n, delta: delta(o, n), scale };
+  };
+
+  return {
+    business: {
+      name: rec.name,
+      slug: rec.site_slug,
+      hostname: rec.site_hostname,
+    },
+    generated_at: new Date().toISOString(),
+    old_url: rec.website,
+    old_summary: rec.ai_summary,
+    new_summary: rec.new_ai_summary,
+    metrics: [
+      m(
+        "Performance",
+        "lighthouse_performance",
+        "new_lighthouse_performance",
+        "100",
+      ),
+      m(
+        "Accessibility",
+        "lighthouse_accessibility",
+        "new_lighthouse_accessibility",
+        "100",
+      ),
+      m(
+        "Best practices",
+        "lighthouse_best_practices",
+        "new_lighthouse_best_practices",
+        "100",
+      ),
+      m("SEO", "seo_score", "new_seo_score", "100"),
+      m("AEO", "aeo_score", "new_aeo_score", "100"),
+      m("Design", "ai_design_score", "new_ai_design_score", "10"),
+      m("Quality", "ai_quality_score", "new_ai_quality_score", "10"),
+    ],
+  };
+}
+
+export interface OverlayInstallResult {
+  comparisonPath: string;
+  overlayPath: string;
+}
+
+export function installOverlay(
+  distDir: string,
+  data: ComparisonData,
+): OverlayInstallResult {
+  if (!existsSync(distDir)) {
+    throw new Error(`dist not found: ${distDir}`);
+  }
+
+  const comparisonPath = join(distDir, "comparison.json");
+  writeFileSync(comparisonPath, JSON.stringify(data, null, 2), "utf8");
+
+  const overlayPath = join(distDir, "upgrade-overlay.js");
+  copyFileSync(OVERLAY_TEMPLATE, overlayPath);
+
+  // Inject the script tag into dist/index.html before </body>.
+  const indexPath = join(distDir, "index.html");
+  if (existsSync(indexPath)) {
+    let html = readFileSync(indexPath, "utf8");
+    if (!html.includes("data-site-upgrade-overlay")) {
+      if (html.includes("</body>")) {
+        html = html.replace("</body>", `${OVERLAY_SCRIPT_TAG}\n</body>`);
+      } else {
+        html = `${html}\n${OVERLAY_SCRIPT_TAG}\n`;
+      }
+      writeFileSync(indexPath, html, "utf8");
+    }
+  }
+
+  return { comparisonPath, overlayPath };
+}
