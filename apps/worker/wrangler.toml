@@ -2,8 +2,11 @@
 # and `YOUR_ACCOUNT_ID` with your Cloudflare account id before deploying.
 name = "site-router"
 main = "src/index.ts"
-compatibility_date = "2025-01-01"
+compatibility_date = "2025-12-01"
 account_id = "YOUR_ACCOUNT_ID"
+
+[observability]
+enabled = true
 
 [[r2_buckets]]
 binding = "SITES"

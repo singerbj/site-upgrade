@@ -55,6 +55,8 @@ export default {
         ? "public, max-age=60, s-maxage=300"
         : "public, max-age=31536000, immutable",
     );
+    headers.set("x-content-type-options", "nosniff");
+    headers.set("referrer-policy", "strict-origin-when-cross-origin");
 
     const response = new Response(object.body, { headers });
 

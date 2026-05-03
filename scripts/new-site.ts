@@ -13,10 +13,10 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => {
   }));
 
 const name = args.name;
-const hostname = args.hostname;
-const title = args.title ?? name;
+const hostnameInput = args.hostname;
+const title = args.title ?? args.name;
 
-if (!name || !hostname) {
+if (!name || !hostnameInput) {
   console.error("Usage: --name=<dir> --hostname=<host> [--title=<title>]");
   process.exit(1);
 }
@@ -25,6 +25,19 @@ if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) {
   console.error(
     "--name must be kebab-case (lowercase letters, digits, hyphens)",
   );
+  process.exit(1);
+}
+
+// R2 keys are case-sensitive and the worker lowercases the Host header,
+// so the hostname stored in package.json must be lowercase too or the
+// site will 404 in production.
+const hostname = hostnameInput.toLowerCase();
+if (
+  !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(
+    hostname,
+  )
+) {
+  console.error(`--hostname is not a valid DNS name: ${hostnameInput}`);
   process.exit(1);
 }
 
