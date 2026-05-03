@@ -1,12 +1,11 @@
 // Shared regex/normalization helpers.
 
-export const EMAIL_RE =
-  /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,24})/g;
+const EMAIL_RE = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,24})/g;
 
 // Phone matching is intentionally permissive — we collect everything that
-// looks plausible, dedup, then keep what's left. The site itself is the
+// looks plausible, then filter by digit count. The site itself is the
 // source of truth for what's a real number.
-export const PHONE_RE =
+const PHONE_RE =
   /(\+?\d{1,3}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}(?:[\s.-]?\d{1,4})?/g;
 
 export function uniq<T>(xs: Iterable<T>): T[] {
@@ -28,21 +27,16 @@ export function extractPhones(text: string): string[] {
   return uniq(
     matches
       .map((m) => m.replace(/\s+/g, " ").trim())
-      // Require >= 7 digits to filter out years, prices, addresses etc.
-      .filter((m) => (m.match(/\d/g) ?? []).length >= 7)
-      .filter((m) => (m.match(/\d/g) ?? []).length <= 15),
+      // 7-15 digits weeds out years, prices, postcodes, and serials.
+      .filter((m) => {
+        const digits = (m.match(/\d/g) ?? []).length;
+        return digits >= 7 && digits <= 15;
+      }),
   );
 }
 
 export function joinList(xs: string[]): string {
   return xs.join("; ");
-}
-
-export function parseList(s: string): string[] {
-  return s
-    .split(";")
-    .map((x) => x.trim())
-    .filter(Boolean);
 }
 
 export function safeFilename(s: string): string {
@@ -73,4 +67,13 @@ export function originOf(url: string): string {
   } catch {
     return "";
   }
+}
+
+// Maps' authority links are usually absolute, but occasionally come back
+// as bare hostnames. Prepend https:// if the input lacks a scheme so
+// downstream `new URL(...)` and `page.goto(...)` accept it.
+export function normalizeUrl(url: string): string {
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  return `https://${url.replace(/^\/+/, "")}`;
 }

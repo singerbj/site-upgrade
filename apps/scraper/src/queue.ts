@@ -43,11 +43,17 @@ export class Queue {
   }
 
   // Fire and forget — used when the orchestrator wants to schedule work
-  // but not wait inline for every item to finish.
-  enqueue<T>(task: Task<T>, onError?: (err: unknown) => void): Promise<T> {
+  // but not wait inline for every item to finish. Errors flow into
+  // onError if provided, otherwise they're swallowed (callers that
+  // care should pass onError or await `run` directly). This prevents
+  // unhandledRejection when the caller intentionally drops the promise.
+  enqueue<T>(
+    task: Task<T>,
+    onError?: (err: unknown) => void,
+  ): Promise<T | undefined> {
     return this.run(task).catch((e) => {
       if (onError) onError(e);
-      throw e;
+      return undefined;
     });
   }
 

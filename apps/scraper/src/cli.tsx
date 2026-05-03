@@ -9,19 +9,17 @@ import type { QueueStats } from "./queue.ts";
 
 // CLI surface
 //   scraper --query="dentists in Austin TX" [--max=40] [--headful]
-//          [--no-lighthouse] [--no-ai] [--model=mistral-large-latest]
+//          [--no-lighthouse] [--no-ai] [--model=pixtral-large-latest]
 //          [--csv=path] [--data-dir=path]
 
-const args = Object.fromEntries(
-  process.argv.slice(2).map((a) => {
+const args = Object.fromEntries(process.argv.slice(2).map((a) => {
     const [k, ...v] = a.replace(/^--/, "").split("=");
     return [k, v.length ? v.join("=") : "true"];
-  }),
-);
+  }));
 
-if (!args.query) {
+if (!args.query || args.query === "true") {
   console.error(
-    "Usage: scraper --query=\"dentists in Austin TX\" [--max=40] [--headful] [--no-lighthouse] [--no-ai] [--model=mistral-large-latest]",
+    'Usage: scraper --query="dentists in Austin TX" [--max=40] [--headful] [--no-lighthouse] [--no-ai] [--model=pixtral-large-latest]',
   );
   process.exit(1);
 }
@@ -31,7 +29,9 @@ const PKG_ROOT = resolve(HERE, "..");
 const dataDir = args["data-dir"]
   ? resolve(args["data-dir"])
   : resolve(PKG_ROOT, "data");
-const csvPath = args.csv ? resolve(args.csv) : resolve(dataDir, "businesses.csv");
+const csvPath = args.csv
+  ? resolve(args.csv)
+  : resolve(dataDir, "businesses.csv");
 
 const opts = {
   query: args.query,
@@ -46,6 +46,17 @@ const opts = {
   aiModel: args.model,
 };
 
+interface RecentEntry {
+  id: number;
+  stage: string;
+  name: string;
+  status: string;
+  detail?: string;
+}
+interface ErrorEntry {
+  id: number;
+  message: string;
+}
 interface State {
   mapsStatus: "idle" | "scraping" | "done";
   scrolled: number;
@@ -54,11 +65,13 @@ interface State {
   crawl: QueueStats;
   lighthouse: QueueStats;
   ai: QueueStats;
-  recent: { stage: string; name: string; status: string; detail?: string }[];
-  errors: string[];
+  recent: RecentEntry[];
+  errors: ErrorEntry[];
   finished: boolean;
   summary?: { total: number; new: number; processed: number };
 }
+
+let nextEntryId = 0;
 
 const initialQ: QueueStats = { size: 0, active: 0, done: 0, errors: 0 };
 
@@ -101,7 +114,8 @@ function App() {
             next.ai = e.ai;
             break;
           case "item": {
-            const head = {
+            const head: RecentEntry = {
+              id: ++nextEntryId,
               stage: e.stage,
               name: e.name,
               status: e.status,
@@ -110,7 +124,10 @@ function App() {
             next.recent = [head, ...s.recent].slice(0, 10);
             if (e.status === "error") {
               next.errors = [
-                `${e.stage}:${e.name}: ${e.detail ?? ""}`,
+                {
+                  id: ++nextEntryId,
+                  message: `${e.stage}:${e.name}: ${e.detail ?? ""}`,
+                },
                 ...s.errors,
               ].slice(0, 5);
             }
@@ -118,7 +135,10 @@ function App() {
           }
           case "log":
             if (e.level === "error") {
-              next.errors = [e.message, ...s.errors].slice(0, 5);
+              next.errors = [
+                { id: ++nextEntryId, message: e.message },
+                ...s.errors,
+              ].slice(0, 5);
             }
             break;
           case "summary":
@@ -130,18 +150,24 @@ function App() {
       });
     });
 
+    let runError: Error | undefined;
     pipeline
       .run()
       .catch((err) => {
+        runError = err instanceof Error ? err : new Error(String(err));
         setState((s) => ({
           ...s,
-          errors: [String(err?.message ?? err), ...s.errors],
+          errors: [
+            { id: ++nextEntryId, message: String(err?.message ?? err) },
+            ...s.errors,
+          ],
           finished: true,
         }));
       })
       .finally(() => {
-        // Tiny delay so the final frame renders before unmount.
-        setTimeout(() => exit(), 50);
+        // Small delay so the final frame renders before unmount. Passing
+        // the Error to exit() makes Ink set the process exit code.
+        setTimeout(() => exit(runError), 50);
       });
   }, []);
 
@@ -149,13 +175,13 @@ function App() {
     <Box flexDirection="column">
       <Box>
         <Text bold>site-upgrade scraper</Text>
-        <Text>  query: </Text>
+        <Text> query: </Text>
         <Text color="cyan">{opts.query}</Text>
       </Box>
       <Box marginTop={1} flexDirection="column">
         <Text bold>Phase 1 — Google Maps</Text>
         <Box>
-          <Text>  status: </Text>
+          <Text> status: </Text>
           {state.mapsStatus === "scraping" ? (
             <>
               <Spinner type="dots" />
@@ -168,7 +194,8 @@ function App() {
           )}
         </Box>
         <Text>
-          {"  "}scrolled: {state.scrolled} | listings seen: {state.total} | new this run: {state.newRows}
+          {"  "}scrolled: {state.scrolled} | listings seen: {state.total} | new
+          this run: {state.newRows}
         </Text>
       </Box>
       <Box marginTop={1} flexDirection="column">
@@ -180,10 +207,10 @@ function App() {
       <Box marginTop={1} flexDirection="column">
         <Text bold>Recent activity</Text>
         {state.recent.length === 0 ? (
-          <Text color="gray">  (waiting…)</Text>
+          <Text color="gray"> (waiting…)</Text>
         ) : (
-          state.recent.map((r, i) => (
-            <Text key={i}>
+          state.recent.map((r) => (
+            <Text key={r.id}>
               {"  "}
               <Text color={statusColor(r.status)}>{padRight(r.status, 5)}</Text>{" "}
               <Text color="magenta">{padRight(r.stage, 10)}</Text>{" "}
@@ -195,21 +222,27 @@ function App() {
       </Box>
       {state.errors.length > 0 && (
         <Box marginTop={1} flexDirection="column">
-          <Text bold color="red">Errors</Text>
-          {state.errors.map((er, i) => (
-            <Text key={i} color="red">
-              {"  "}{er}
+          <Text bold color="red">
+            Errors
+          </Text>
+          {state.errors.map((er) => (
+            <Text key={er.id} color="red">
+              {"  "}
+              {er.message}
             </Text>
           ))}
         </Box>
       )}
       {state.summary && (
         <Box marginTop={1} flexDirection="column">
-          <Text bold color="green">Done</Text>
-          <Text>
-            {"  "}rows in CSV: {state.summary.total} | new this run: {state.summary.new} | processed: {state.summary.processed}
+          <Text bold color="green">
+            Done
           </Text>
-          <Text color="gray">  csv: {opts.csvPath}</Text>
+          <Text>
+            {"  "}rows in CSV: {state.summary.total} | new this run:{" "}
+            {state.summary.new} | processed: {state.summary.processed}
+          </Text>
+          <Text color="gray"> csv: {opts.csvPath}</Text>
         </Box>
       )}
     </Box>
@@ -221,10 +254,10 @@ function QueueLine({ label, stats }: { label: string; stats: QueueStats }) {
     <Text>
       {"  "}
       <Text color="cyan">{label}</Text>
-      {"  "}active=<Text color="yellow">{stats.active}</Text>{" "}
-      pending=<Text color="yellow">{stats.size}</Text>{" "}
-      done=<Text color="green">{stats.done}</Text>{" "}
-      errors=<Text color={stats.errors ? "red" : "gray"}>{stats.errors}</Text>
+      {"  "}active=<Text color="yellow">{stats.active}</Text> pending=
+      <Text color="yellow">{stats.size}</Text> done=
+      <Text color="green">{stats.done}</Text> errors=
+      <Text color={stats.errors ? "red" : "gray"}>{stats.errors}</Text>
     </Text>
   );
 }

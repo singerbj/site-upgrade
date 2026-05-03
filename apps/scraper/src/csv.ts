@@ -92,16 +92,15 @@ function parseCsv(text: string): BusinessRecord[] {
   if (rows.length === 0) return [];
   const header = parseLine(rows[0]);
   const records: BusinessRecord[] = [];
+  const fieldSet = new Set<string>(FIELDS);
   for (let r = 1; r < rows.length; r++) {
     const cells = parseLine(rows[r]);
-    const rec = emptyRecord();
+    const rec = emptyRecord() as unknown as Record<string, string>;
     for (let c = 0; c < header.length; c++) {
-      const key = header[c] as keyof BusinessRecord;
-      if (FIELDS.includes(key)) {
-        (rec as Record<string, string>)[key] = cells[c] ?? "";
-      }
+      const key = header[c];
+      if (fieldSet.has(key)) rec[key] = cells[c] ?? "";
     }
-    records.push(rec);
+    records.push(rec as unknown as BusinessRecord);
   }
   return records;
 }
@@ -122,9 +121,11 @@ export class CsvStore {
   private order: string[] = [];
   private flushChain: Promise<void> = Promise.resolve();
   private dirty = false;
+  private onError?: (err: unknown) => void;
 
-  constructor(path: string) {
+  constructor(path: string, onError?: (err: unknown) => void) {
     this.path = path;
+    this.onError = onError;
     if (existsSync(path)) {
       const text = readFileSync(path, "utf8");
       const records = parseCsv(text);
@@ -166,25 +167,26 @@ export class CsvStore {
     return this.byKey.size;
   }
 
-  countWhere(pred: (r: BusinessRecord) => boolean): number {
-    let n = 0;
-    for (const r of this.byKey.values()) if (pred(r)) n++;
-    return n;
-  }
-
-  // Atomic write: serialize to a sibling tmp, fsync-implicit rename.
-  // Serialized via flushChain to prevent overlapping writers.
+  // Atomic write: serialize to a sibling tmp, then rename. Errors are
+  // swallowed (and reported via onError) so a single bad write doesn't
+  // poison the chain — the next flush still runs.
   flush(): Promise<void> {
     this.flushChain = this.flushChain.then(async () => {
       if (!this.dirty) return;
       this.dirty = false;
-      const records = this.order
-        .map((k) => this.byKey.get(k))
-        .filter((r): r is BusinessRecord => Boolean(r));
-      const text = serialize(records);
-      const tmp = `${this.path}.tmp`;
-      writeFileSync(tmp, text, "utf8");
-      renameSync(tmp, this.path);
+      try {
+        const records = this.order
+          .map((k) => this.byKey.get(k))
+          .filter((r): r is BusinessRecord => Boolean(r));
+        const text = serialize(records);
+        const tmp = `${this.path}.tmp`;
+        writeFileSync(tmp, text, "utf8");
+        renameSync(tmp, this.path);
+      } catch (err) {
+        // Mark dirty again so the next flush retries.
+        this.dirty = true;
+        if (this.onError) this.onError(err);
+      }
     });
     return this.flushChain;
   }

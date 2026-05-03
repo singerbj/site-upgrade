@@ -12,8 +12,8 @@ search query, it:
 3. **Runs Lighthouse** against the homepage for performance + accessibility
    + best-practices + SEO scores.
 4. **Scores the design and quality** of the homepage with the AI SDK +
-   Mistral (`mistral-large-latest`) using the screenshot, and produces a
-   feature inventory and short summary.
+   Mistral (`pixtral-large-latest`, vision-capable) using the screenshot,
+   and produces a feature inventory and short summary.
 
 Everything lands in `data/businesses.csv` — the source of truth, committed
 to source control. Re-running the same query is safe: rows already in the
@@ -57,7 +57,7 @@ export MISTRAL_API_KEY=...
 npm run scrape -w @apps/scraper -- --query="dentists in Austin TX" --max=40
 
 # Or directly:
-node --experimental-strip-types apps/scraper/src/cli.tsx \
+npx tsx apps/scraper/src/cli.tsx \
   --query="hvac contractors in Boise ID" --max=30
 ```
 
@@ -70,7 +70,7 @@ Useful flags:
 | `--headful`          | off                    | Show the Playwright browser window          |
 | `--no-lighthouse`    | off                    | Skip the Lighthouse stage                   |
 | `--no-ai`            | off                    | Skip the Mistral assessment stage           |
-| `--model=<id>`       | `mistral-large-latest` | Override the Mistral model                  |
+| `--model=<id>`       | `pixtral-large-latest` | Override the Mistral model (must be vision-capable) |
 | `--csv=<path>`       | `data/businesses.csv`  | Override CSV location                       |
 | `--data-dir=<path>`  | `data/`                | Override the screenshots/crawls/lh dirs     |
 

@@ -110,13 +110,16 @@ async function readDetailsPanel(page: Page): Promise<Partial<BusinessRecord>> {
   };
 
   // Address / phone / website use stable data-item-ids.
-  const address = await grab('button[data-item-id="address"] div.fontBodyMedium');
+  const address = await grab(
+    'button[data-item-id="address"] div.fontBodyMedium',
+  );
   const phone = await grab('button[data-item-id^="phone"] div.fontBodyMedium');
-  const website = (await page
-    .locator('a[data-item-id="authority"]')
-    .first()
-    .getAttribute("href")
-    .catch(() => null)) ?? "";
+  const website =
+    (await page
+      .locator('a[data-item-id="authority"]')
+      .first()
+      .getAttribute("href")
+      .catch(() => null)) ?? "";
 
   // Category sits in a button.DkEaL near the H1.
   const category = await grab("button.DkEaL");
@@ -151,13 +154,17 @@ async function readDetailsPanel(page: Page): Promise<Partial<BusinessRecord>> {
 export interface ScraperEvents {
   onScrolled?: (count: number) => void;
   onListing?: (listing: ScrapedListing) => void;
+  // If provided, called with each anchor's pre-extracted place_id before
+  // we click it. Returning true skips the click — used by the orchestrator
+  // to avoid re-fetching detail panels for businesses already in the CSV.
+  shouldSkip?: (placeIdHint: string) => boolean;
 }
 
 export async function scrapeGoogleMaps(
   opts: MapsScrapeOptions,
   events: ScraperEvents = {},
 ): Promise<ScrapedListing[]> {
-  const maxResults = opts.maxResults ?? 50;
+  const maxResults = opts.maxResults ?? 40;
   const perItemDelayMs = opts.perItemDelayMs ?? 600;
 
   const browser: Browser = await chromium.launch({
@@ -176,7 +183,7 @@ export async function scrapeGoogleMaps(
 
     await scrollFeedToEnd(page, maxResults, events.onScrolled);
 
-    const anchors = await page.locator('a.hfpxzc').elementHandles();
+    const anchors = await page.locator("a.hfpxzc").elementHandles();
     const limit = Math.min(anchors.length, maxResults);
     const results: ScrapedListing[] = [];
 
@@ -184,6 +191,10 @@ export async function scrapeGoogleMaps(
       const a = anchors[i];
       const href = (await a.getAttribute("href").catch(() => "")) ?? "";
       const preId = placeIdFromUrl(href);
+
+      // Cheap dedup: if the orchestrator already has this place_id, skip
+      // the click + detail panel read entirely. Saves ~1s per known item.
+      if (preId && events.shouldSkip?.(`pid:${preId}`)) continue;
 
       // Click and wait for URL to swap; sometimes the anchor click is
       // intercepted, fall back to navigating directly.
@@ -196,8 +207,7 @@ export async function scrapeGoogleMaps(
       const partial: ScrapedListing = {
         ...emptyRecord(),
         ...details,
-        place_id:
-          (details as Partial<BusinessRecord>).place_id || preId || "",
+        place_id: (details as Partial<BusinessRecord>).place_id || preId || "",
         query: opts.query,
         scraped_at: nowIso(),
         name: (details as Partial<BusinessRecord>).name ?? "",

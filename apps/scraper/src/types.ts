@@ -80,5 +80,7 @@ export const FIELDS: (keyof BusinessRecord)[] = [
 ];
 
 export function emptyRecord(): BusinessRecord {
-  return Object.fromEntries(FIELDS.map((f) => [f, ""])) as BusinessRecord;
+  return Object.fromEntries(
+    FIELDS.map((f) => [f, ""]),
+  ) as unknown as BusinessRecord;
 }

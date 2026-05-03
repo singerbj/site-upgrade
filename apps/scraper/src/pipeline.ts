@@ -6,7 +6,7 @@ import { CsvStore, dedupKey } from "./csv.ts";
 import { type ScrapedListing, scrapeGoogleMaps } from "./google-maps.ts";
 import { runLighthouse } from "./lighthouse.ts";
 import { Queue, type QueueStats } from "./queue.ts";
-import { joinList } from "./util.ts";
+import { joinList, normalizeUrl, safeFilename } from "./util.ts";
 
 // The orchestrator wires the four stages together with the right
 // concurrency profile:
@@ -37,7 +37,12 @@ export type PhaseEvent =
   | { type: "phase"; phase: "maps"; status: "start" | "done"; count?: number }
   | { type: "scrolled"; count: number }
   | { type: "listing"; name: string; total: number; new: number }
-  | { type: "queues"; crawl: QueueStats; lighthouse: QueueStats; ai: QueueStats }
+  | {
+      type: "queues";
+      crawl: QueueStats;
+      lighthouse: QueueStats;
+      ai: QueueStats;
+    }
   | {
       type: "item";
       key: string;
@@ -63,7 +68,15 @@ export class Pipeline {
 
   constructor(opts: PipelineOptions) {
     this.opts = opts;
-    this.store = new CsvStore(opts.csvPath);
+    this.store = new CsvStore(opts.csvPath, (err) => {
+      this.emit({
+        type: "log",
+        level: "error",
+        message: `csv flush failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      });
+    });
     this.crawlQ = new Queue(opts.crawlConcurrency ?? 3);
     this.lighthouseQ = new Queue(opts.lighthouseConcurrency ?? 2);
     // Mistral free tier: 1 in-flight request, period.
@@ -113,6 +126,9 @@ export class Pipeline {
       },
       {
         onScrolled: (count) => this.emit({ type: "scrolled", count }),
+        // Pre-click dedup using only the place_id we can read off the
+        // anchor href — saves the per-item detail click on re-runs.
+        shouldSkip: (key) => this.store.has(key),
         onListing: (listing) => {
           totalCount++;
           const key = dedupKey(listing);
@@ -147,7 +163,12 @@ export class Pipeline {
       },
     );
 
-    this.emit({ type: "phase", phase: "maps", status: "done", count: listings.length });
+    this.emit({
+      type: "phase",
+      phase: "maps",
+      status: "done",
+      count: listings.length,
+    });
 
     // Drain order matters: lighthouse and AI tasks are *scheduled* from
     // inside crawl tasks. Draining them in parallel with crawl would
@@ -166,7 +187,7 @@ export class Pipeline {
   }
 
   private scheduleProcessing(key: string, listing: ScrapedListing) {
-    const website = listing.website;
+    const website = normalizeUrl(listing.website ?? "");
     if (!website) return;
 
     // 1. Crawl — produces screenshot + extracted contacts.
@@ -207,7 +228,8 @@ export class Pipeline {
 
         // 2a. Schedule AI immediately — Mistral queue is the bottleneck,
         // we want it busy as soon as a screenshot exists.
-        if (!this.opts.skipAi) this.scheduleAi(key, listing, result.screenshotPath);
+        if (!this.opts.skipAi)
+          this.scheduleAi(key, listing, result.screenshotPath);
 
         // 2b. Schedule Lighthouse in parallel.
         if (!this.opts.skipLighthouse) this.scheduleLighthouse(key, listing);
@@ -233,7 +255,7 @@ export class Pipeline {
   }
 
   private scheduleLighthouse(key: string, listing: ScrapedListing) {
-    const website = listing.website;
+    const website = normalizeUrl(listing.website ?? "");
     if (!website) return;
     this.lighthouseQ.enqueue(async () => {
       this.store.upsert(key, { lighthouse_status: "running" });
@@ -301,11 +323,9 @@ export class Pipeline {
       });
       try {
         // Pull a small text excerpt from the crawled HTML for grounding.
+        // The slug must match the one crawl.ts wrote, so use the same helper.
         const rec = this.store.get(key);
-        const htmlPath = join(
-          this.opts.crawlsDir,
-          `${key.replace(/[^a-zA-Z0-9._-]+/g, "_")}.html`,
-        );
+        const htmlPath = join(this.opts.crawlsDir, `${safeFilename(key)}.html`);
         let contextText = "";
         try {
           contextText = readFileSync(htmlPath, "utf8")

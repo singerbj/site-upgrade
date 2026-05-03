@@ -54,10 +54,10 @@ export async function crawlSite(
   const htmlPath = join(htmlDir, `${slug}.html`);
 
   const browser: Browser = await chromium.launch({ headless: true });
+  // Use Playwright's default desktop Chromium UA — small business sites
+  // routinely 403 anything declaring itself a bot.
   const context = await browser.newContext({
     viewport: { width: 1366, height: 900 },
-    userAgent:
-      "Mozilla/5.0 (compatible; SiteUpgradeBot/1.0; +https://github.com/singerbj/site-upgrade)",
   });
 
   const allText: string[] = [];

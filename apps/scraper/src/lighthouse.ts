@@ -55,7 +55,11 @@ export async function runLighthouse(
     const reportPath = join(outDir, `${safeFilename(key)}.json`);
     writeFileSync(reportPath, JSON.stringify(lhr, null, 2), "utf8");
 
-    const cat = (id: string) => Math.round(((lhr.categories as Record<string, { score: number | null }>)[id]?.score ?? 0) * 100);
+    const cat = (id: string) =>
+      Math.round(
+        ((lhr.categories as Record<string, { score: number | null }>)[id]
+          ?.score ?? 0) * 100,
+      );
 
     return {
       performance: cat("performance"),
@@ -65,6 +69,10 @@ export async function runLighthouse(
       reportPath,
     };
   } finally {
-    await chrome.kill().catch(() => {});
+    try {
+      chrome.kill();
+    } catch {
+      // Chrome may already be dead — nothing to do.
+    }
   }
 }

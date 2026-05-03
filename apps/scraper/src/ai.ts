@@ -3,10 +3,10 @@ import { mistral } from "@ai-sdk/mistral";
 import { generateObject } from "ai";
 import { z } from "zod";
 
-// AI assessment uses ai-sdk with the Mistral provider. mistral-large-latest
-// is the user-specified model. The assessment is structured: design and
-// quality scores 1-10 plus a feature inventory. We keep the prompt tight
-// because the AI SDK serializes everything into a single request.
+// AI assessment uses ai-sdk with the Mistral provider. The default model
+// is pixtral-large-latest because it's vision-capable; mistral-large-latest
+// would reject the image attachment. The assessment is structured: design
+// and quality scores 1-10 plus a feature inventory.
 //
 // IMPORTANT: callers MUST serialize calls to this function — Mistral
 // allows only 1 in-flight request on the free tier. The orchestrator wraps
@@ -45,7 +45,7 @@ export interface AssessOptions {
 }
 
 export async function assessSite(opts: AssessOptions): Promise<Assessment> {
-  const modelName = opts.model ?? "mistral-large-latest";
+  const modelName = opts.model ?? "pixtral-large-latest";
   const image = readFileSync(opts.screenshotPath);
 
   const { object } = await generateObject({
