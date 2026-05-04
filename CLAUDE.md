@@ -60,6 +60,25 @@ site will deploy on the next push to `main`.
 - `scripts/` - deploy + scaffolding. Touch carefully; changing anything
   here rebuilds every site on next push.
 - `sites/example/` - the canonical template. `new-site` copies it.
+- `sites/<name>/src/components/Analytics.tsx` - GA4 + Consent Mode v2 setup.
+- `sites/<name>/src/components/ConsentBanner.tsx` - the consent UI.
+
+## Analytics + consent
+
+Every site ships with GA4 wired up via Google Consent Mode v2:
+
+- Default consent is `denied` for all storage categories. GA runs in
+  cookieless-ping mode until the user accepts, so first-load tracking is
+  GDPR/ePrivacy-friendly out of the box.
+- The `<ConsentBanner />` is mounted in the root layout; clicking Accept
+  flips consent to `granted` and persists `localStorage.consent="granted"`,
+  which the inline init script restores on subsequent visits.
+- The GA measurement ID is read from `NEXT_PUBLIC_GA_ID` at build time. If
+  it is unset, neither the gtag scripts nor the banner render. Set it
+  per-site in `.env.production` (or in CI matrix env) - do not hardcode it
+  into the components.
+- Do not load gtag.js or any other tag manager outside of `Analytics.tsx`.
+  Adding a second loader breaks consent state and double-counts pageviews.
 
 ## How deploys work
 
