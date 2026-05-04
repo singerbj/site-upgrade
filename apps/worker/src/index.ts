@@ -92,6 +92,7 @@ function guessContentType(path: string): string {
     xml: "application/xml",
     pdf: "application/pdf",
     map: "application/json",
+    webmanifest: "application/manifest+json",
   };
   return map[ext] ?? "application/octet-stream";
 }

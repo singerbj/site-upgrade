@@ -1,4 +1,6 @@
-export function App() {
+import Link from "next/link";
+
+export default function NotFound() {
   return (
     <main
       style={{
@@ -9,11 +11,9 @@ export function App() {
         lineHeight: 1.6,
       }}
     >
-      <h1>Example Site</h1>
-      <p>
-        This is a Vite SPA hosted on Cloudflare via R2 + a router Worker. Each
-        site in this monorepo deploys independently to its own subdomain.
-      </p>
+      <h1>404</h1>
+      <p>This page could not be found.</p>
+      <Link href="/">Return home</Link>
     </main>
   );
 }

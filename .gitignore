@@ -1,7 +1,10 @@
 node_modules
 dist
+out
+.next
 .turbo
 .wrangler
+*.tsbuildinfo
 .env
 .env.local
 .env.*.local

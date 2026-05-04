@@ -13,6 +13,8 @@
   },
   "ignorePatterns": [
     "**/dist/**",
+    "**/.next/**",
+    "**/out/**",
     "**/.turbo/**",
     "**/.wrangler/**",
     "**/node_modules/**"
