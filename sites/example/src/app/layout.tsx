@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Analytics } from "../components/Analytics";
 import { ConsentBanner } from "../components/ConsentBanner";
 import { JsonLd } from "../components/JsonLd";
+import { WebVitals } from "../components/WebVitals";
 import { siteConfig } from "../lib/site-config";
 import { Providers } from "./providers";
 
@@ -56,6 +57,7 @@ export default function RootLayout({
     <html lang={siteConfig.locale}>
       <body>
         <Analytics />
+        <WebVitals />
         <JsonLd />
         <Providers>
           {children}

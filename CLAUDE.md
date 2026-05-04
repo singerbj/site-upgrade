@@ -70,6 +70,8 @@ site will deploy on the next push to `main`.
 - `sites/<name>/src/components/ConsentBanner.tsx` - the consent UI.
 - `sites/<name>/src/components/ConsentSettings.tsx` - consent withdrawal
   UI used on the privacy page.
+- `sites/<name>/src/components/WebVitals.tsx` - Core Web Vitals reporter
+  that forwards to GA via gtag (consent-aware).
 - `sites/<name>/src/components/JsonLd.tsx` - WebSite + Organization
   schema.org JSON-LD for SEO/AEO.
 - `sites/<name>/src/components/UnsplashImage.tsx` - server component for
@@ -151,6 +153,15 @@ Every site ships with GA4 wired up via Google Consent Mode v2:
   and the banner links there. The withdraw path resets `gtag` consent to
   `denied` and clears the `localStorage.consent` key (so the banner
   reappears on next visit).
+- **Global Privacy Control** is honored: when the browser exposes
+  `navigator.globalPrivacyControl === true`, the banner is suppressed,
+  `localStorage.consent="granted"` is ignored, and consent stays denied
+  for the session. CCPA-mandated in California; treat any change here
+  as a compliance change.
+- **Web Vitals → GA**: `<WebVitals />` is mounted in the root layout and
+  forwards LCP/INP/CLS/FCP/TTFB to GA via the same gtag pipe, so consent
+  mode applies (cookieless when denied, attributed when granted). Useful
+  for Core Web Vitals SEO signals; no extra setup needed.
 - Do not load gtag.js or any other tag manager outside of `Analytics.tsx`.
   Adding a second loader breaks consent state and double-counts pageviews.
 

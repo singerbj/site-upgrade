@@ -33,6 +33,18 @@ export default function PrivacyPage() {
         The cookie can be cleared at any time from your browser settings, or by
         clicking <em>Decline analytics cookies</em> below.
       </p>
+      <p>
+        We honor the{" "}
+        <a
+          href="https://globalprivacycontrol.org/"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Global Privacy Control
+        </a>{" "}
+        signal. If your browser sends GPC, analytics is treated as denied for
+        every visit regardless of any prior choice you made here.
+      </p>
 
       <h2>Cookie settings</h2>
       <ConsentSettings />

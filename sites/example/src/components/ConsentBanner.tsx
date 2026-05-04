@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { type ConsentValue, getConsent, setConsent } from "../lib/consent";
+import {
+  type ConsentValue,
+  getConsent,
+  isGpcEnabled,
+  setConsent,
+} from "../lib/consent";
 
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
@@ -11,6 +16,9 @@ export function ConsentBanner() {
 
   useEffect(() => {
     if (!GA_ID) return;
+    // Browser is signalling Global Privacy Control — treat as a binding
+    // "denied" choice and skip the banner entirely.
+    if (isGpcEnabled()) return;
     if (getConsent() === null) setShow(true);
   }, []);
 

@@ -13,6 +13,7 @@ export function Analytics() {
 window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 window.gtag = gtag;
+var gpc = (navigator && navigator.globalPrivacyControl === true);
 gtag('consent', 'default', {
   ad_storage: 'denied',
   ad_user_data: 'denied',
@@ -24,7 +25,7 @@ gtag('set', 'ads_data_redaction', true);
 gtag('set', 'url_passthrough', true);
 gtag('js', new Date());
 try {
-  if (localStorage.getItem('consent') === 'granted') {
+  if (!gpc && localStorage.getItem('consent') === 'granted') {
     gtag('consent', 'update', {
       ad_storage: 'granted',
       ad_user_data: 'granted',
