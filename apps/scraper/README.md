@@ -11,7 +11,8 @@ End-to-end lead pipeline. Given a Google Maps search query, it:
    dumps all visible copy.
 3. **Captures an SEO snapshot** of the homepage (title, meta tags,
    Open Graph / Twitter cards, headings, JSON-LD schema, alt-text
-   coverage, link counts) for grounded AI scoring later.
+   coverage, link counts, computed font families) for grounded AI
+   scoring later.
 4. **Runs Lighthouse** against the homepage for performance,
    accessibility, best-practices, and SEO scores.
 5. **Scores the design, quality, SEO, and AEO** of the homepage with
@@ -31,6 +32,13 @@ End-to-end lead pipeline. Given a Google Maps search query, it:
    `dist/`. A vanilla-JS Shadow DOM widget reads `/comparison.json` at
    runtime and shows old → new score deltas to anyone visiting the
    demo site, so the prospect sees the value before they sign.
+
+When a Maps listing has **no website**, the pipeline replaces steps
+2-5 with a single "invent" stage: a text-only Mistral call synthesizes
+a brand kit from the business profile (name + category + address) and
+the pipeline renders an SVG monogram + wordmark logo from the invented
+palette and initials. Steps 6-8 then run normally with the invented
+brand kit feeding the brief.
 
 Everything lands in `data/businesses.csv` — the source of truth, committed
 to source control. Re-running the same query is safe: rows already in the
@@ -246,6 +254,29 @@ gallery, voice tags, headlines, and feature list. Visit
 The kit is also available to Claude Code during generation at
 `.assets/brand-kit.json`. The brief instructs Claude to use it as the
 source of truth for branding decisions.
+
+### Greenfield case (no existing website)
+
+When a Maps listing has no `website` field, there's nothing to crawl
+and nothing to score. The pipeline routes through an **invent** stage
+instead:
+
+- A text-only Mistral call (`mistral-large-latest` by default) takes
+  the business name + category + address and returns the same
+  brand-kit fields (palette, voice, tagline, audience, feature
+  hints) plus monogram-friendly initials.
+- The SVG logo is rendered programmatically from the invented palette
+  and initials — a monogram badge plus a wordmark, ~1.2 KB,
+  self-contained, no external font refs. Saved to
+  `.assets/logos/00-invented.svg`.
+- The brand kit is built and written exactly like the upgrade case.
+  Claude Code reads the same `.assets/brand-kit.json` and follows a
+  greenfield variant of the brief (absolute Lighthouse / AEO targets
+  instead of "beat these numbers").
+- The CSV row uses `crawl_status="skipped"` plus a populated
+  `brand_palette` / `brand_tagline` to mark the invented case.
+  Existing-site score columns are intentionally empty; the comparison
+  overlay hides delta chips for missing old values automatically.
 
 ## Comparison overlay
 

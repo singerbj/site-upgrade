@@ -86,9 +86,117 @@ const BrandKit = z.object({
 });
 
 export type BrandKit = z.infer<typeof BrandKit>;
+export type Palette = BrandKit["colors"]["palette"];
 export const BrandKitSchema = BrandKit;
 export const BRAND_KIT_FILENAME = "brand-kit.json";
 export const BRAND_KIT_VIEWER_FILENAME = "brand-kit.html";
+
+// ---------------------------------------------------------------------------
+// Invented logo (SVG)
+// ---------------------------------------------------------------------------
+//
+// When a business has no existing site, the pipeline still needs a
+// visual mark. We render a deterministic monogram + wordmark SVG from
+// the AI-invented palette and initials. SVG so it scales freely and
+// downstream Claude Code can recolor or restyle it.
+
+const FALLBACK_PALETTE = {
+  primary: "#1f2937",
+  background: "#ffffff",
+  text: "#111827",
+  accent: "#6366f1",
+};
+
+function pickColor(palette: Palette, role: string, fallback: string): string {
+  return palette.find((p) => p.role === role)?.hex ?? fallback;
+}
+
+// Best-effort luminance check so we pair the monogram letter with a
+// readable foreground color. Inputs are 6-digit hex like "#aabbcc".
+function isDark(hex: string): boolean {
+  const m = hex.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  if (!m) return true;
+  const [r, g, b] = [
+    Number.parseInt(m[1], 16),
+    Number.parseInt(m[2], 16),
+    Number.parseInt(m[3], 16),
+  ];
+  // Rec. 709 luma.
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return lum < 140;
+}
+
+function escapeXml(s: string): string {
+  return s.replace(
+    /[<>&"']/g,
+    (c) =>
+      ({
+        "<": "&lt;",
+        ">": "&gt;",
+        "&": "&amp;",
+        '"': "&quot;",
+        "'": "&apos;",
+      })[c] ?? c,
+  );
+}
+
+function deriveInitials(name: string): string {
+  const tokens = (name || "")
+    .replace(/[^a-zA-Z0-9 ]+/g, " ")
+    .split(/\s+/)
+    .filter((t) => t && !/^(the|of|and|&|for|a|an|to)$/i.test(t));
+  if (tokens.length === 0) return "?";
+  if (tokens.length === 1) return tokens[0].slice(0, 2).toUpperCase();
+  return (tokens[0][0] + tokens[1][0]).toUpperCase();
+}
+
+export interface InventedLogoArgs {
+  name: string;
+  initials?: string;
+  palette: Palette;
+}
+
+// Monogram badge + horizontal wordmark. Single SVG, no external refs,
+// system-ui font (browsers and most viewers handle it). About 1.2KB.
+export function buildInventedSvgLogo(args: InventedLogoArgs): string {
+  const { name } = args;
+  const initials = (args.initials || deriveInitials(name))
+    .toUpperCase()
+    .slice(0, 3);
+  const palette = args.palette;
+
+  const primary = pickColor(palette, "primary", FALLBACK_PALETTE.primary);
+  const background = pickColor(
+    palette,
+    "background",
+    FALLBACK_PALETTE.background,
+  );
+  const text = pickColor(palette, "text", FALLBACK_PALETTE.text);
+  const accent = pickColor(palette, "accent", FALLBACK_PALETTE.accent);
+
+  // Monogram fg should contrast the badge bg (primary). If primary is
+  // dark use background as the letter color; otherwise use text.
+  const monoFg = isDark(primary) ? background : text;
+
+  // Width scales with name length so the wordmark doesn't overflow.
+  const safeName = (name || "").trim() || "Untitled";
+  const wordmarkLen = safeName.length;
+  const wordmarkWidth = Math.max(140, Math.min(360, 12 + wordmarkLen * 11));
+  const totalWidth = 80 + wordmarkWidth;
+  const totalHeight = 80;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalWidth} ${totalHeight}" width="${totalWidth}" height="${totalHeight}" role="img" aria-label="${escapeXml(safeName)} logo">
+  <title>${escapeXml(safeName)}</title>
+  <rect x="0" y="0" width="${totalWidth}" height="${totalHeight}" rx="12" fill="${background}"/>
+  <rect x="8" y="8" width="64" height="64" rx="14" fill="${primary}"/>
+  <rect x="8" y="60" width="64" height="3" rx="1.5" fill="${accent}" opacity="0.85"/>
+  <text x="40" y="52" text-anchor="middle" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="${
+    initials.length >= 3 ? 22 : 28
+  }" font-weight="700" fill="${monoFg}" letter-spacing="-0.02em">${escapeXml(initials)}</text>
+  <text x="84" y="50" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="22" font-weight="600" fill="${text}" letter-spacing="-0.01em">${escapeXml(safeName)}</text>
+</svg>
+`;
+}
 
 // ---------------------------------------------------------------------------
 // Builder

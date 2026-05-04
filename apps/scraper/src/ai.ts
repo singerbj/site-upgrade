@@ -162,3 +162,91 @@ export async function assessSite(opts: AssessOptions): Promise<Assessment> {
 
   return object;
 }
+
+// ---------------------------------------------------------------------------
+// inventBrand — used when a business has no existing site
+// ---------------------------------------------------------------------------
+//
+// Text-only call (no screenshot to feed) so we use mistral-large-latest
+// by default — it's the right tool for structured-output text without
+// vision. Still goes through the same serialized Mistral queue.
+
+const InventedBrand = z.object({
+  tagline: z.string(),
+  summary: z.string(),
+  voice: z.array(z.string()).max(6),
+  audience: z.string(),
+  palette: z.array(PaletteEntry).max(6),
+  features: z.array(z.string()),
+  logo_initials: z.string().max(3),
+  logo_concept: z.string(),
+});
+
+export type InventedBrand = z.infer<typeof InventedBrand>;
+
+const INVENT_PROMPT = `You are a brand strategist inventing a brand
+identity for a small business that has no existing website. Use the
+business's name, category, and address to ground the invention. Keep
+it tasteful and category-appropriate — a law firm should feel
+authoritative, a coffee shop should feel warm and approachable.
+
+Return:
+- tagline: a single short tagline (4-9 words).
+- summary: 2-3 sentences describing the brand identity in plain
+  language. Mention what they do, who they serve, and the feeling.
+- voice: 3-5 short tone words ("warm", "authoritative", "playful",
+  "minimal", "technical", etc.).
+- audience: a 1-sentence description of the primary customer.
+- palette: 4-6 colors with role assignments. hex must be lowercase
+  #rrggbb; role must be one of primary, secondary, accent,
+  background, text, other. Pick a palette that fits the category and
+  reads accessibly when used at typical web contrast ratios — pair a
+  dark text color with a light background or vice versa.
+- features: 4-8 short feature tags this kind of business should
+  surface on a marketing site (e.g. "menu", "online_ordering",
+  "booking", "contact_form", "hours", "directions", "testimonials",
+  "gallery", "service_list", "pricing", "blog").
+- logo_initials: 1-3 uppercase letters to use as a monogram.
+  Use the most recognizable initials from the business name (skip
+  filler words like "The", "of", "and"). Examples: "Acme Coffee Co"
+  → "AC"; "The Daily Grind" → "DG"; "Smith & Sons Plumbing" → "SS".
+- logo_concept: 1 sentence describing the visual concept (color
+  pairing, monogram style, mood). The pipeline renders the actual
+  SVG; this is just narrative for the brief.`;
+
+export interface InventOptions {
+  name: string;
+  category: string;
+  address: string;
+  phone: string;
+  hours: string;
+  model?: string;
+}
+
+export async function inventBrand(opts: InventOptions): Promise<InventedBrand> {
+  const modelName = opts.model ?? "mistral-large-latest";
+
+  const profile = [
+    `Business name: ${opts.name}`,
+    `Category: ${opts.category || "(unspecified)"}`,
+    `Address: ${opts.address || "(unknown)"}`,
+    `Phone: ${opts.phone || "(unknown)"}`,
+    `Hours: ${opts.hours || "(unknown)"}`,
+  ].join("\n");
+
+  const { object } = await generateObject({
+    model: mistral(modelName),
+    schema: InventedBrand,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: INVENT_PROMPT },
+          { type: "text", text: `## Business profile\n${profile}` },
+        ],
+      },
+    ],
+  });
+
+  return object;
+}
