@@ -12,7 +12,9 @@
     "format:check": "oxfmt --check src"
   },
   "site": {
-    "hostname": "example.example.com"
+    "hostname": "example.example.com",
+    "title": "Example Site",
+    "description": "A Next.js static site hosted on Cloudflare via R2 + a router Worker."
   },
   "dependencies": {
     "@tanstack/react-pacer": "^0.6.0",

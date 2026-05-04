@@ -55,7 +55,41 @@ const MIME: Record<string, string> = {
   ".xml": "application/xml",
   ".pdf": "application/pdf",
   ".map": "application/json",
+  ".webmanifest": "application/manifest+json",
 };
+
+// Next.js metadata routes (icon, apple-icon, opengraph-image,
+// twitter-image) emit extensionless files. Detect the actual format from
+// magic bytes so they ship with the right Content-Type instead of
+// application/octet-stream.
+function sniffMime(body: Buffer): string | undefined {
+  if (
+    body.length >= 8 &&
+    body
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  )
+    return "image/png";
+  if (
+    body.length >= 3 &&
+    body[0] === 0xff &&
+    body[1] === 0xd8 &&
+    body[2] === 0xff
+  )
+    return "image/jpeg";
+  if (
+    body.length >= 6 &&
+    body.subarray(0, 6).toString("ascii").startsWith("GIF8")
+  )
+    return "image/gif";
+  if (
+    body.length >= 12 &&
+    body.subarray(0, 4).toString("ascii") === "RIFF" &&
+    body.subarray(8, 12).toString("ascii") === "WEBP"
+  )
+    return "image/webp";
+  return undefined;
+}
 
 async function* walk(root: string): AsyncGenerator<string> {
   for (const entry of await readdir(root, { withFileTypes: true })) {
@@ -95,7 +129,7 @@ async function main() {
     const key = `${prefix}${rel}`;
     const body = await readFile(file);
     const ext = "." + (rel.split(".").pop() ?? "");
-    const contentType = MIME[ext];
+    const contentType = MIME[ext] ?? sniffMime(body);
     const isHtml = contentType?.startsWith("text/html");
     await s3.send(
       new PutObjectCommand({

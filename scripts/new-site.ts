@@ -1,9 +1,14 @@
 #!/usr/bin/env -S node --experimental-strip-types
-// Scaffolds a new Next.js static site by copying sites/example/ and rewriting
-// the package name, hostname, and the document title.
+// Scaffolds a new Next.js static site by copying sites/example/ and
+// rewriting the per-site config in package.json (name + site field).
+//
+// Per-site title/description live in package.json's "site" field; the
+// app reads them at build time via src/lib/site-config.ts so metadata,
+// OG image, sitemap, manifest, etc. all stay in sync from one place.
 //
 // Usage:
-//   npm run new-site -- --name=blog --hostname=blog.example.com [--title="My Blog"]
+//   npm run new-site -- --name=blog --hostname=blog.example.com \
+//                       --title="My Blog" --description="Posts from me"
 import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -15,9 +20,12 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => {
 const name = args.name;
 const hostnameInput = args.hostname;
 const title = args.title ?? args.name;
+const description = args.description ?? "";
 
 if (!name || !hostnameInput) {
-  console.error("Usage: --name=<dir> --hostname=<host> [--title=<title>]");
+  console.error(
+    "Usage: --name=<dir> --hostname=<host> [--title=<title>] [--description=<desc>]",
+  );
   process.exit(1);
 }
 
@@ -58,24 +66,13 @@ cpSync(template, dest, { recursive: true });
 const pkgPath = join(dest, "package.json");
 const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
 pkg.name = `@sites/${name}`;
-pkg.site = { hostname };
+pkg.site = { hostname, title, description };
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
-
-const layoutPath = join(dest, "src/app/layout.tsx");
-const layout = readFileSync(layoutPath, "utf8");
-const titleRegex = /title:\s*"[^"]*"/;
-if (!titleRegex.test(layout)) {
-  console.error(`Could not find title field in ${layoutPath}`);
-  process.exit(1);
-}
-writeFileSync(
-  layoutPath,
-  layout.replace(titleRegex, `title: ${JSON.stringify(title)}`),
-);
 
 console.log(`Created ${dest}`);
 console.log(`  package: @sites/${name}`);
 console.log(`  hostname: ${hostname}`);
+console.log(`  title: ${title}`);
 console.log(`\nNext steps:`);
 console.log(`  npm install`);
 console.log(`  npm run dev -w @sites/${name}`);

@@ -1,14 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { type ConsentValue, getConsent, setConsent } from "../lib/consent";
 
-declare global {
-  interface Window {
-    gtag?: (...args: unknown[]) => void;
-  }
-}
-
-const STORAGE_KEY = "consent";
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
 export function ConsentBanner() {
@@ -16,29 +11,13 @@ export function ConsentBanner() {
 
   useEffect(() => {
     if (!GA_ID) return;
-    try {
-      if (localStorage.getItem(STORAGE_KEY) === null) {
-        setShow(true);
-      }
-    } catch {
-      // localStorage unavailable (e.g. privacy mode) — leave banner hidden.
-    }
+    if (getConsent() === null) setShow(true);
   }, []);
 
   if (!show) return null;
 
-  function decide(value: "granted" | "denied") {
-    try {
-      localStorage.setItem(STORAGE_KEY, value);
-    } catch {
-      // ignore
-    }
-    window.gtag?.("consent", "update", {
-      ad_storage: value,
-      ad_user_data: value,
-      ad_personalization: value,
-      analytics_storage: value,
-    });
+  function decide(value: ConsentValue) {
+    setConsent(value);
     setShow(false);
   }
 
@@ -67,7 +46,11 @@ export function ConsentBanner() {
     >
       <p style={{ margin: "0 0 0.75rem 0" }}>
         We use analytics to understand how this site is used. Until you accept,
-        analytics runs in cookieless mode.
+        analytics runs in cookieless mode.{" "}
+        <Link href="/privacy/" style={{ color: "#111" }}>
+          Learn more
+        </Link>
+        .
       </p>
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button
