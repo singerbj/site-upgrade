@@ -15,6 +15,18 @@ import { z } from "zod";
 // allows only 1 in-flight request on the free tier. The orchestrator
 // wraps every call in a concurrency=1 Queue.
 
+const PaletteEntry = z.object({
+  hex: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  role: z.enum([
+    "primary",
+    "secondary",
+    "accent",
+    "background",
+    "text",
+    "other",
+  ]),
+});
+
 const Assessment = z.object({
   design_score: z.number().min(1).max(10),
   quality_score: z.number().min(1).max(10),
@@ -24,9 +36,15 @@ const Assessment = z.object({
   seo_summary: z.string(),
   aeo_score: z.number().min(0).max(100),
   aeo_summary: z.string(),
+  // Brand-kit fields. Same call so we don't burn a second Mistral
+  // round trip just to ask "what colors are on this site?".
+  palette: z.array(PaletteEntry).max(6),
+  voice: z.array(z.string()).max(6),
+  tagline: z.string(),
 });
 
 export type Assessment = z.infer<typeof Assessment>;
+export type PaletteEntry = z.infer<typeof PaletteEntry>;
 
 const PROMPT = `You are a senior web auditor scoring a small-business
 website on behalf of a sales team. You receive a homepage screenshot,
@@ -88,6 +106,21 @@ Most small business sites score 25-55 — they lack structured Q&A and
 explicit fact statements.
 
 - aeo_summary: 1-2 sentences describing AEO state and biggest gap.
+
+## Brand kit
+
+Pull a few brand-kit signals out of the same screenshot so we don't
+have to make a second model call:
+
+- palette: up to 6 colors visible on the page, each with a role.
+  hex must be 6-digit lowercase #rrggbb. Roles must be one of
+  primary, secondary, accent, background, text, other. Rank by
+  prominence — the primary brand color first.
+- voice: 3-5 short tone descriptors that fit the copy + design
+  ("warm", "authoritative", "playful", "technical", "minimal", etc.).
+- tagline: a one-line tagline candidate, derived from the page if
+  one exists, or written from the visible copy if none is present.
+  Prefer the existing tagline when there is one.
 
 Be honest. Most small business sites score 3-6 on design/quality,
 40-65 on SEO, 25-55 on AEO.`;

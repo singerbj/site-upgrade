@@ -5,6 +5,13 @@ import { assessSite } from "./ai.ts";
 import { crawlSite } from "./crawl.ts";
 import { CsvStore, dedupKey } from "./csv.ts";
 import {
+  BRAND_KIT_FILENAME,
+  buildBrandKit,
+  installBrandKit,
+  paletteToCsv,
+  writeBrandKit,
+} from "./brand-kit.ts";
+import {
   EVALUATE_PORT,
   buildComparison,
   buildSite,
@@ -94,6 +101,7 @@ interface SitePaths {
   briefPath: string;
   oldSeoSnapshot: string;
   newSeoSnapshot: string;
+  brandKitPath: string;
   hostname: string;
   slug: string;
   packageName: string;
@@ -315,6 +323,7 @@ export class Pipeline {
       briefPath: join(siteDir, "BRIEF.md"),
       oldSeoSnapshot: join(assetsDir, "seo-snapshot.json"),
       newSeoSnapshot: join(assetsDir, "new-seo-snapshot.json"),
+      brandKitPath: join(assetsDir, BRAND_KIT_FILENAME),
       hostname,
       slug,
       packageName: `@sites/${slug}`,
@@ -501,6 +510,9 @@ export class Pipeline {
           seo_summary: out.seo_summary,
           aeo_score: String(out.aeo_score),
           aeo_summary: out.aeo_summary,
+          brand_palette: paletteToCsv(out.palette),
+          brand_voice: joinList(out.voice),
+          brand_tagline: out.tagline,
         });
         await this.store.flush();
         this.emit({
@@ -563,6 +575,38 @@ export class Pipeline {
           .map((p) => p.trim())
           .filter(Boolean)
           .map((p) => resolve(this.opts.repoRoot, p));
+
+        // Build + persist the brand kit JSON so Claude Code can read
+        // it from .assets/brand-kit.json during the generation session.
+        let oldSnapshot: SeoSnapshot | null = null;
+        try {
+          oldSnapshot = JSON.parse(
+            readFileSync(paths.oldSeoSnapshot, "utf8"),
+          ) as SeoSnapshot;
+        } catch {
+          // No snapshot — kit will fall back to system fonts etc.
+        }
+        try {
+          const kit = buildBrandKit({
+            rec,
+            snapshot: oldSnapshot,
+            logoAbsPaths,
+            siteDir: paths.siteDir,
+          });
+          writeBrandKit(kit, paths.brandKitPath);
+          this.store.upsert(key, {
+            brand_kit_path: this.rel(paths.brandKitPath),
+          });
+        } catch (err) {
+          this.emit({
+            type: "log",
+            level: "warn",
+            message: `brand kit build failed: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          });
+        }
+
         const briefPath = writeBrief({
           siteDir: paths.siteDir,
           rec,
@@ -732,6 +776,35 @@ export class Pipeline {
             type: "log",
             level: "warn",
             message: `overlay install failed: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          });
+        }
+
+        // Publish the brand kit alongside the deployed site so
+        // <hostname>/brand-kit.html shows the captured palette,
+        // typography, voice, logos, and headlines for sales review.
+        try {
+          const finalRec = this.store.get(key);
+          if (finalRec) {
+            const logoAbsPaths = finalRec.logo_paths
+              .split(";")
+              .map((p) => p.trim())
+              .filter(Boolean)
+              .map((p) => resolve(this.opts.repoRoot, p));
+            const kit = buildBrandKit({
+              rec: finalRec,
+              snapshot: newSnapshot ?? null,
+              logoAbsPaths,
+              siteDir: paths.siteDir,
+            });
+            installBrandKit({ distDir, kit, logoAbsPaths });
+          }
+        } catch (err) {
+          this.emit({
+            type: "log",
+            level: "warn",
+            message: `brand kit publish failed: ${
               err instanceof Error ? err.message : String(err)
             }`,
           });

@@ -43,9 +43,9 @@ export interface BusinessRecord {
   lighthouse_best_practices: string;
   lighthouse_seo: string;
 
-  // AI assessment of the existing site (design + quality + SEO + AEO).
-  // ai_design_score / ai_quality_score are 1-10. seo_score / aeo_score
-  // are 0-100 to match Lighthouse-style scales.
+  // AI assessment of the existing site (design + quality + SEO + AEO
+  // + brand-kit signals). ai_design_score / ai_quality_score are 1-10;
+  // seo_score / aeo_score are 0-100 to match Lighthouse-style scales.
   ai_status: StageStatus | "";
   ai_design_score: string;
   ai_quality_score: string;
@@ -55,6 +55,14 @@ export interface BusinessRecord {
   seo_summary: string;
   aeo_score: string;
   aeo_summary: string;
+  // Brand-kit signals captured in the same AI call. brand_palette is
+  // a semicolon-separated list of "#hex:role" pairs; brand_voice is a
+  // semicolon-separated list of tone words. brand_kit_path points at
+  // the structured JSON kit assembled from all signals.
+  brand_palette: string;
+  brand_voice: string;
+  brand_tagline: string;
+  brand_kit_path: string;
 
   // Generation: scaffold + Claude Code -> a new React site for this business
   brief_path: string;
@@ -124,6 +132,10 @@ export const FIELDS: (keyof BusinessRecord)[] = [
   "seo_summary",
   "aeo_score",
   "aeo_summary",
+  "brand_palette",
+  "brand_voice",
+  "brand_tagline",
+  "brand_kit_path",
   "brief_path",
   "generation_status",
   "generation_summary",

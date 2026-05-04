@@ -57,11 +57,15 @@ sites/<slug>/
     pages/all-pages.html      # raw HTML of every crawled page
     seo-snapshot.json         # head metadata + headings + schema (existing)
     new-seo-snapshot.json     # same shape, captured against the new build
+    brand-kit.json            # versioned brand kit; Claude Code reads this
     lighthouse/old.json       # report against the existing site
     lighthouse/new.json       # report against the generated site
   dist/                       # produced by build; gitignored at repo root
     comparison.json           # injected post-build; the overlay reads this
     upgrade-overlay.js        # injected post-build; tamper-proof overlay
+    brand-kit.json            # published kit for the deployed viewer
+    brand-kit.html            # standalone /brand-kit.html viewer
+    assets/logos/             # logos copied for in-browser display
 ```
 
 Slug is `<kebab-name>-<6-hex>` derived from the business name + a hash of
@@ -102,11 +106,11 @@ which claude
 
 ```bash
 # From the repo root:
-npm run scrape -- --query="dentists in Austin TX" --max=40
+npm run scrape -- --query="dentists in Austin TX" --places=40
 
 # Or directly:
 npx tsx apps/scraper/src/cli.tsx \
-  --query="hvac contractors in Boise ID" --max=30
+  --query="hvac contractors in Boise ID" --places=30
 ```
 
 Useful flags:
@@ -114,7 +118,7 @@ Useful flags:
 | Flag                       | Default                | Notes                                                  |
 |----------------------------|------------------------|--------------------------------------------------------|
 | `--query=<text>`           | required               | Google Maps search string                              |
-| `--max=<n>`                | 40                     | Max results to scrape from Maps                        |
+| `--places=<n>`             | 40                     | Number of businesses to pull from Maps (alias: `--max`) |
 | `--apex=<domain>`          | `example.com`          | Per-site hostname is `<slug>.<apex>`                   |
 | `--headful`                | off                    | Show the Playwright browser window                     |
 | `--no-lighthouse`          | off                    | Skip the existing-site Lighthouse stage                |
@@ -161,6 +165,7 @@ lighthouse_status, lighthouse_performance, lighthouse_accessibility,
 lighthouse_best_practices, lighthouse_seo,
 ai_status, ai_design_score, ai_quality_score, ai_features, ai_summary,
 seo_score, seo_summary, aeo_score, aeo_summary,
+brand_palette, brand_voice, brand_tagline, brand_kit_path,
 brief_path, generation_status, generation_summary,
 new_screenshot_path,
 new_lighthouse_status, new_lighthouse_performance,
@@ -190,6 +195,57 @@ search intent? is the JSON-LD relevant? is the heading outline coherent?).
 `aeo_score` measures how cite-friendly the page is for LLM-driven search
 (Perplexity / ChatGPT / AI Overviews) — clear factual statements, FAQ
 schema, semantic HTML, an extractable About paragraph.
+
+## Brand kit
+
+Each business gets a versioned brand kit JSON document at
+`sites/<slug>/.assets/brand-kit.json` (and a published copy at
+`<hostname>/brand-kit.json` after deploy). The schema (`version: "1"`)
+is defined in `src/brand-kit.ts` and lives at the URL
+`https://site-upgrade/brand-kit.schema.json` for downstream consumers.
+
+```jsonc
+{
+  "$schema": "https://site-upgrade/brand-kit.schema.json",
+  "version": "1",
+  "business": { "name": ..., "tagline": ..., "phone": ..., "emails": [...], ... },
+  "identity": { "summary": ..., "voice": ["warm", "authoritative"], "audience": ... },
+  "colors":   { "palette": [{ "hex": "#1a4d8c", "role": "primary" }, ...] },
+  "typography": {
+    "heading": { "family": "Inter", "fallbacks": ["sans-serif"] },
+    "body":    { "family": "Inter", "fallbacks": ["sans-serif"] }
+  },
+  "logos":    [{ "path": ".assets/logos/00-header.svg", "hint": "header", "primary": true }],
+  "copy":     { "headlines": [...], "summary": ... },
+  "features": [...],
+  "sources":  { "captured_from": ..., "captured_at": ..., "screenshot": ..., ... }
+}
+```
+
+Population:
+
+- `business.*` — straight from the Google Maps + crawl data.
+- `identity.voice`, `colors.palette`, `business.tagline` — extracted by
+  the same Mistral pass that scores the design (no extra round trip
+  through the 1-in-flight Mistral queue).
+- `typography.heading/body` — read from the rendered DOM via
+  `getComputedStyle` during the crawl.
+- `logos` — files downloaded by the crawler (header / nav imagery,
+  `og:image`, favicon).
+- `copy.headlines` — h1 + h2 text from the SEO snapshot.
+
+After build, `installBrandKit` copies the logos into
+`dist/assets/logos/`, rewrites their kit paths to
+`/assets/logos/<basename>`, writes `dist/brand-kit.json`, and copies
+`templates/brand-kit.html` to `dist/brand-kit.html`. The viewer is a
+self-contained vanilla page that fetches `/brand-kit.json` on load and
+renders the palette, typography samples (in the actual fonts), logo
+gallery, voice tags, headlines, and feature list. Visit
+`<slug>.<apex>/brand-kit.html` after deploy.
+
+The kit is also available to Claude Code during generation at
+`.assets/brand-kit.json`. The brief instructs Claude to use it as the
+source of truth for branding decisions.
 
 ## Comparison overlay
 

@@ -64,6 +64,10 @@ and add any additional source files needed to satisfy this brief.
 
 ## Brand assets (already in this directory)
 
+- **Brand kit JSON: \`.assets/brand-kit.json\`** — start here. It's a
+  versioned, schema-validated document with the palette (with roles),
+  voice tags, tagline, typography, logos, headlines, and identity copy.
+  Treat it as the source of truth for branding decisions.
 - Homepage screenshot of the existing site: \`${oldScreenshotRel}\`
 - All visible copy from the existing site: \`${copyRel}\`
 - Logo candidates (use the best one; first listed is highest priority):
@@ -141,14 +145,21 @@ Existing-site summary from the auditor: ${oldSummary}
    marketing copy. State the service area, hours, price ranges, and
    accepted payment methods if known.
 
-## Comparison overlay (do not implement)
+## Comparison overlay + brand kit viewer (do not implement)
 
-The pipeline injects a tamper-proof comparison overlay into \`dist/\`
-post-build, plus a \`dist/comparison.json\` data file. It loads via a
-single \`<script src="/upgrade-overlay.js" defer>\` tag appended before
-\`</body>\`. Do not add this script tag yourself — the pipeline does it.
-Do not write a \`comparison.json\` or a \`upgrade-overlay.js\` of your
-own. Plan layout so the bottom-right ~340×220px area can hold a small
+The pipeline post-processes \`dist/\` after your build with two
+auto-injected artifacts:
+
+- \`dist/comparison.json\` + \`dist/upgrade-overlay.js\` plus a
+  \`<script src="/upgrade-overlay.js" defer>\` tag before \`</body>\`.
+  The overlay is a Shadow-DOM widget at the bottom-right of every
+  page; do not add it yourself.
+- \`dist/brand-kit.json\` + \`dist/brand-kit.html\` (a standalone
+  brand-kit viewer reachable at \`/brand-kit.html\`). Do not write
+  these files; the pipeline generates them from the same brand kit
+  you read at \`.assets/brand-kit.json\`.
+
+Plan layout so the bottom-right ~340×220px area can hold a small
 floating card without colliding with the cookie banner that pushes
 content up from the bottom.
 
