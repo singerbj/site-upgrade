@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node --experimental-strip-types
-// Scaffolds a new Vite SPA by copying sites/example/ and rewriting the
-// package name, hostname, and HTML title.
+// Scaffolds a new Next.js static site by copying sites/example/ and rewriting
+// the package name, hostname, and the document title.
 //
 // Usage:
 //   npm run new-site -- --name=blog --hostname=blog.example.com [--title="My Blog"]
@@ -61,10 +61,17 @@ pkg.name = `@sites/${name}`;
 pkg.site = { hostname };
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
 
-const indexPath = join(dest, "index.html");
-let html = readFileSync(indexPath, "utf8");
-html = html.replace(/<title>.*<\/title>/, `<title>${title}</title>`);
-writeFileSync(indexPath, html);
+const layoutPath = join(dest, "src/app/layout.tsx");
+const layout = readFileSync(layoutPath, "utf8");
+const titleRegex = /title:\s*"[^"]*"/;
+if (!titleRegex.test(layout)) {
+  console.error(`Could not find title field in ${layoutPath}`);
+  process.exit(1);
+}
+writeFileSync(
+  layoutPath,
+  layout.replace(titleRegex, `title: ${JSON.stringify(title)}`),
+);
 
 console.log(`Created ${dest}`);
 console.log(`  package: @sites/${name}`);

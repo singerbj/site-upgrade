@@ -1,11 +1,12 @@
 # Instructions for Claude
 
-This repo hosts an arbitrary number of static SPAs on Cloudflare. You are
-expected to add new sites here freely. Follow the conventions below.
+This repo hosts an arbitrary number of statically-exported sites on
+Cloudflare. You are expected to add new sites here freely. Follow the
+conventions below.
 
 ## Stack (do not deviate)
 
-- **Vite** + React + TypeScript for every site
+- **Next.js** (App Router, `output: 'export'`) + React + TypeScript for every site
 - **oxlint** for linting, **oxfmt** for formatting
 - **better-npm-audit** for dependency security checks
 - **@tanstack/react-table** for tables
@@ -30,8 +31,8 @@ npm run new-site -- --name=<kebab-case> --hostname=<sub>.example.com --title="<T
 npm install
 ```
 
-Then edit `sites/<name>/src/` like any Vite + React + TS project. The site
-will deploy on the next push to `main`.
+Then edit `sites/<name>/src/app/` like any Next.js App Router project. The
+site will deploy on the next push to `main`.
 
 ## Conventions, do not break them
 
@@ -39,11 +40,15 @@ will deploy on the next push to `main`.
 - Every site's `package.json` MUST have:
   - `"name": "@sites/<name>"`
   - `"site": { "hostname": "<sub>.example.com" }`
-  - a `"build"` script that emits to `dist/`
+  - a `"build"` script that emits to `dist/` (Next.js exports to `out/` by
+    default; the template's `build` script renames it to `dist/` so the
+    deploy pipeline keeps working unchanged)
+- Every site's `next.config.mjs` MUST set `output: "export"` so the build
+  produces a fully static export uploadable to R2.
 - Hostnames are lowercase and must be a subdomain of the configured apex.
 - Do not add a per-site GitHub Actions workflow. The single root workflow
   fans out across all sites automatically.
-- Do not commit `node_modules`, `dist`, or `.turbo`.
+- Do not commit `node_modules`, `dist`, `out`, `.next`, or `.turbo`.
 - Do not introduce a different package manager. Use npm.
 - Do not introduce a competing state library when react-query covers the
   use case (server data, caching, retries, mutations).
@@ -83,7 +88,11 @@ npm run dev -w site-router                    # run the worker locally
 ## Things to NOT do
 
 - Do not introduce a different framework per site without a strong reason.
-  Stick with React + Vite + TS so all sites share the same tooling.
+  Stick with Next.js (static export) + React + TS so all sites share the
+  same tooling.
+- Do not switch a site to SSR / ISR / route handlers / server actions. The
+  hosting layer is R2 + a static-file router; anything that requires a
+  Node runtime will not work in production.
 - Do not change the R2 key layout (`<hostname>/<path>`). The worker depends
   on it.
 - Do not move or rename `sites/example/` - the scaffold script copies it.

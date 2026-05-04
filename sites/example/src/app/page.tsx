@@ -1,4 +1,4 @@
-export function App() {
+export default function Page() {
   return (
     <main
       style={{
@@ -11,8 +11,9 @@ export function App() {
     >
       <h1>Example Site</h1>
       <p>
-        This is a Vite SPA hosted on Cloudflare via R2 + a router Worker. Each
-        site in this monorepo deploys independently to its own subdomain.
+        This is a Next.js static site hosted on Cloudflare via R2 + a router
+        Worker. Each site in this monorepo deploys independently to its own
+        subdomain.
       </p>
     </main>
   );

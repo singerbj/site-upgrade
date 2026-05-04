@@ -1,14 +1,14 @@
 # site-upgrade
 
 Multi-site static hosting on Cloudflare. One Turborepo holds an arbitrary
-number of Vite SPAs; each one ships independently to its own subdomain
-under a shared apex.
+number of statically-exported Next.js sites; each one ships independently
+to its own subdomain under a shared apex.
 
 ## Stack
 
 | Concern                         | Tool                       |
 |---------------------------------|----------------------------|
-| Build tool                      | Vite                       |
+| Framework                       | Next.js (static export)    |
 | Linting                         | oxlint                     |
 | Formatting                      | oxfmt                      |
 | Security audit                  | better-npm-audit           |
@@ -31,8 +31,9 @@ under a shared apex.
 
 - `apps/worker/` is the only Worker. It reads the `Host` header and serves
   the matching prefix out of a single R2 bucket.
-- `sites/<name>/` is one Vite SPA per directory. Its `package.json` declares
-  the hostname it ships to via `"site": { "hostname": "..." }`.
+- `sites/<name>/` is one Next.js static-export site per directory. Its
+  `package.json` declares the hostname it ships to via
+  `"site": { "hostname": "..." }`.
 - The deploy workflow diffs the push, builds only the sites that changed,
   and uploads each one to R2 in parallel.
 
@@ -43,7 +44,7 @@ apps/
   worker/                  Cloudflare router Worker
   scraper/                 Lead pipeline: Google Maps -> crawl -> Lighthouse -> AI
 sites/
-  example/                 Starter Vite + React + TS SPA (template)
+  example/                 Starter Next.js + React + TS site (template)
 scripts/
   deploy-site.ts           Upload a built site dir to R2
   changed-sites.ts         Detect which sites changed (used by CI)
