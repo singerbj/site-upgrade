@@ -1,12 +1,19 @@
 import type { BusinessRecord } from "./types.ts";
 
-// Generates the BRIEF.md that Claude Code reads as its sole spec for the
-// new site. It bundles the business profile, the existing-site numbers
-// to beat, the feature inventory to preserve, and every hard requirement
-// the user spelled out (motion animations, GA, cookie consent, etc).
+// Generates the BRIEF.md that Claude Code reads as its sole spec for
+// the new site. Two flavors:
 //
-// Keep this file the single source of truth for the spec. Changes here
-// flow through to every site Claude Code generates next run.
+//   - Existing-site brief: bundles the captured numbers (Lighthouse,
+//     SEO, AEO, design) as targets to beat, and points at the
+//     screenshot / copy / logos extracted from the existing site.
+//
+//   - Greenfield brief: fires when the business has no existing site.
+//     Pivots from "beat these numbers" to absolute targets, and
+//     points at the invented brand kit + the auto-generated SVG logo.
+//
+// Both flavors keep the same hard requirements (motion, GA, cookie
+// consent, SEO/AEO essentials) so output is consistent across the
+// whole CSV.
 
 export interface BriefContext {
   rec: BusinessRecord;
@@ -18,6 +25,11 @@ export interface BriefContext {
 }
 
 export function renderBrief(ctx: BriefContext): string {
+  const greenfield = !ctx.rec.website;
+  return greenfield ? renderGreenfieldBrief(ctx) : renderUpgradeBrief(ctx);
+}
+
+function renderUpgradeBrief(ctx: BriefContext): string {
   const { rec, copyRel, logosRel, oldScreenshotRel } = ctx;
 
   const oldPerf = rec.lighthouse_performance || "(not measured)";
@@ -35,11 +47,7 @@ export function renderBrief(ctx: BriefContext): string {
 
   const phone = rec.phone || rec.crawl_phones.split(";")[0]?.trim() || "";
   const emails = rec.crawl_emails || "(none extracted)";
-
-  const logosBlock =
-    logosRel.length > 0
-      ? logosRel.map((p) => `- ${p}`).join("\n")
-      : "_(none extracted — design a wordmark from the business name)_";
+  const logosBlock = formatLogos(logosRel);
 
   return `# BRIEF — ${rec.name}
 
@@ -64,6 +72,10 @@ and add any additional source files needed to satisfy this brief.
 
 ## Brand assets (already in this directory)
 
+- **Brand kit JSON: \`.assets/brand-kit.json\`** — start here. It's a
+  versioned, schema-validated document with the palette (with roles),
+  voice tags, tagline, typography, logos, headlines, and identity copy.
+  Treat it as the source of truth for branding decisions.
 - Homepage screenshot of the existing site: \`${oldScreenshotRel}\`
 - All visible copy from the existing site: \`${copyRel}\`
 - Logo candidates (use the best one; first listed is highest priority):
@@ -97,7 +109,118 @@ ${oldFeatures || "(none detected — keep at minimum: contact info, hours, servi
 
 Existing-site summary from the auditor: ${oldSummary}
 
-## Hard requirements
+${HARD_REQUIREMENTS(rec.site_slug)}
+
+${POST_BUILD_NOTE}
+
+## Branding direction
+
+Pull palette and typography hints from the homepage screenshot
+(\`${oldScreenshotRel}\`). Match the spirit of the brand without copying
+the existing layout — the goal is "obviously the same business, but
+clearly redesigned and modernized." Use copy from \`${copyRel}\` as the
+content source; rewrite for clarity and concision but keep the
+business's own voice and any specific service names / offerings.
+
+${DELIVERABLE}
+`;
+}
+
+function renderGreenfieldBrief(ctx: BriefContext): string {
+  const { rec, logosRel } = ctx;
+  const phone = rec.phone || "";
+  const tagline = rec.brand_tagline || "(invent one)";
+  const features = rec.ai_features || "(use category-typical features)";
+  const summary = rec.ai_summary || "(invent one)";
+  const voice = rec.brand_voice || "(invent one)";
+  const logosBlock = formatLogos(logosRel);
+
+  return `# BRIEF — ${rec.name} (greenfield)
+
+You are building a static React + Vite + TypeScript marketing site
+**from scratch** for the small business described below. There is no
+existing website to reference — the pipeline has invented a brand kit
+and rendered an SVG logo programmatically before invoking you. Use the
+brand kit as the source of truth for every design decision.
+
+The site already has a scaffolded \`package.json\`, \`index.html\`,
+\`src/main.tsx\`, and \`src/App.tsx\` (copied from \`sites/example/\`).
+Replace \`src/App.tsx\` and add any additional source files needed to
+satisfy this brief.
+
+## Business
+
+| Field | Value |
+|---|---|
+| Name | ${rec.name} |
+| Category | ${rec.category || "(unspecified)"} |
+| Address | ${rec.address || "(unknown)"} |
+| Phone | ${phone || "(unknown)"} |
+| Existing site | _none — greenfield_ |
+| Hours | ${rec.hours || "(unknown)"} |
+| Maps URL | ${rec.maps_url} |
+| Tagline (invented) | ${tagline} |
+| Voice (invented) | ${voice} |
+
+## Brand assets (already in this directory)
+
+- **Brand kit JSON: \`.assets/brand-kit.json\`** — read this first.
+  Versioned, schema-validated, contains the invented palette (with
+  roles), voice tags, tagline, audience description, and feature
+  hints. **All branding decisions must derive from it.**
+- Generated SVG logo (use this verbatim or restyle, but keep the
+  monogram + initials so the brand reads consistently):
+
+${logosBlock}
+
+## Targets to hit
+
+There is no existing site to beat, so optimize against absolute
+benchmarks. The pipeline will measure your build with Lighthouse, a
+fresh SEO snapshot, and the vision-model scorer.
+
+| Metric | Target |
+|---|---|
+| Lighthouse performance | ≥ 97 |
+| Lighthouse accessibility | ≥ 97 |
+| Lighthouse best-practices | ≥ 95 |
+| Lighthouse SEO | ≥ 95 |
+| AI SEO score (0-100) | ≥ 80 |
+| AI AEO score (0-100) | ≥ 70 |
+| AI design score (1-10) | ≥ 8 |
+| AI quality score (1-10) | ≥ 8 |
+
+## Suggested feature inventory (category-appropriate)
+
+${features}
+
+Brand summary (invented): ${summary}
+
+${HARD_REQUIREMENTS(rec.site_slug)}
+
+${POST_BUILD_NOTE}
+
+## Branding direction
+
+Read \`.assets/brand-kit.json\` and use the palette as your design
+system foundation. Apply the \`primary\` role for brand accents, the
+\`background\` role for surfaces, the \`text\` role for body copy, and
+\`accent\` for interactive elements. Use the invented voice tags to
+calibrate copy tone. The provided SVG logo is deliberately minimal —
+feel free to enhance it visually as long as the monogram + initials
+stay legible and the color choices stay inside the kit's palette.
+
+${DELIVERABLE}
+`;
+}
+
+function formatLogos(logosRel: string[]): string {
+  return logosRel.length > 0
+    ? logosRel.map((p) => `- ${p}`).join("\n")
+    : "_(no logos available — design a wordmark from the business name)_";
+}
+
+const HARD_REQUIREMENTS = (slug: string) => `## Hard requirements
 
 1. **React + Vite + TypeScript only.** Use the workspace's existing
    tooling. No alternative framework.
@@ -113,8 +236,7 @@ Existing-site summary from the auditor: ${oldSummary}
    - Anchored to the bottom of the viewport.
    - When visible, **pushes the rest of the page content up** (not an
      overlay — content reflows above it).
-   - Visual style matches the brand colors derived from the logo /
-     existing site.
+   - Visual style matches the brand colors from the brand kit.
    - Persists the user's choice to localStorage so it doesn't reappear.
    - Only loads GA after consent.
 5. **Accessibility.** Semantic landmarks (header, nav, main, footer),
@@ -125,7 +247,7 @@ Existing-site summary from the auditor: ${oldSummary}
    library unless multiple pages are warranted. Inline critical CSS or
    keep stylesheets small. Defer non-essential JS. Use \`<img loading="lazy">\`
    and provide width/height to avoid CLS. Tree-shake everything.
-7. **Build cleanly.** \`npm run build -w @sites/${rec.site_slug}\` from the
+7. **Build cleanly.** \`npm run build -w @sites/${slug}\` from the
    repo root must succeed and produce a working \`dist/\`.
 8. **SEO essentials.** Set a unique, specific \`<title>\` (50-60 chars)
    and \`<meta name="description">\` (~150 chars). Include
@@ -139,33 +261,29 @@ Existing-site summary from the auditor: ${oldSummary}
    FAQ section with question-style H3s, and a JSON-LD \`FAQPage\` block
    mirroring those questions. Use plain language statements over
    marketing copy. State the service area, hours, price ranges, and
-   accepted payment methods if known.
+   accepted payment methods if known.`;
 
-## Comparison overlay (do not implement)
+const POST_BUILD_NOTE = `## Comparison overlay + brand kit viewer (do not implement)
 
-The pipeline injects a tamper-proof comparison overlay into \`dist/\`
-post-build, plus a \`dist/comparison.json\` data file. It loads via a
-single \`<script src="/upgrade-overlay.js" defer>\` tag appended before
-\`</body>\`. Do not add this script tag yourself — the pipeline does it.
-Do not write a \`comparison.json\` or a \`upgrade-overlay.js\` of your
-own. Plan layout so the bottom-right ~340×220px area can hold a small
+The pipeline post-processes \`dist/\` after your build with two
+auto-injected artifacts:
+
+- \`dist/comparison.json\` + \`dist/upgrade-overlay.js\` plus a
+  \`<script src="/upgrade-overlay.js" defer>\` tag before \`</body>\`.
+  The overlay is a Shadow-DOM widget at the bottom-right of every
+  page; do not add it yourself.
+- \`dist/brand-kit.json\` + \`dist/brand-kit.html\` (a standalone
+  brand-kit viewer reachable at \`/brand-kit.html\`). Do not write
+  these files; the pipeline generates them from the same brand kit
+  you read at \`.assets/brand-kit.json\`.
+
+Plan layout so the bottom-right ~340×220px area can hold a small
 floating card without colliding with the cookie banner that pushes
-content up from the bottom.
+content up from the bottom.`;
 
-## Branding direction
-
-Pull palette and typography hints from the homepage screenshot
-(\`${oldScreenshotRel}\`). Match the spirit of the brand without copying
-the existing layout — the goal is "obviously the same business, but
-clearly redesigned and modernized." Use copy from \`${copyRel}\` as the
-content source; rewrite for clarity and concision but keep the
-business's own voice and any specific service names / offerings.
-
-## Deliverable
+const DELIVERABLE = `## Deliverable
 
 When you finish, write a one-paragraph summary of what you built to
 \`GENERATION_SUMMARY.md\` in this directory. Cover: chosen palette, key
 features implemented, any libraries you added, and any deviations from
-this brief.
-`;
-}
+this brief.`;

@@ -1,9 +1,17 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { chromium } from "playwright";
-import { assessSite } from "./ai.ts";
+import { assessSite, inventBrand } from "./ai.ts";
 import { crawlSite } from "./crawl.ts";
 import { CsvStore, dedupKey } from "./csv.ts";
+import {
+  BRAND_KIT_FILENAME,
+  buildBrandKit,
+  buildInventedSvgLogo,
+  installBrandKit,
+  paletteToCsv,
+  writeBrandKit,
+} from "./brand-kit.ts";
 import {
   EVALUATE_PORT,
   buildComparison,
@@ -74,7 +82,7 @@ export type PhaseEvent =
       type: "item";
       key: string;
       name: string;
-      stage: "crawl" | "lighthouse" | "ai" | "generate" | "evaluate";
+      stage: "crawl" | "lighthouse" | "ai" | "invent" | "generate" | "evaluate";
       status: "start" | "ok" | "error" | "skip";
       detail?: string;
     }
@@ -94,6 +102,7 @@ interface SitePaths {
   briefPath: string;
   oldSeoSnapshot: string;
   newSeoSnapshot: string;
+  brandKitPath: string;
   hostname: string;
   slug: string;
   packageName: string;
@@ -223,24 +232,26 @@ export class Pipeline {
             return;
           }
 
-          const stagePending = !listing.website
-            ? "skipped"
-            : ("pending" as const);
+          // Two paths: a business with a website goes through the full
+          // crawl + assess + generate + evaluate flow. A business with
+          // no website goes through invent + generate + evaluate, where
+          // invent is a text-only Mistral call that synthesizes the
+          // brand kit from name + category + address and the pipeline
+          // generates the logo SVG programmatically.
+          const hasSite = Boolean(listing.website);
           this.store.upsert(key, {
             ...listing,
             site_dir: this.rel(paths.siteDir),
             site_slug: paths.slug,
             site_hostname: paths.hostname,
-            crawl_status: stagePending,
-            lighthouse_status: stagePending,
-            ai_status: stagePending,
-            generation_status: this.opts.skipGeneration
-              ? "skipped"
-              : stagePending,
+            crawl_status: hasSite ? "pending" : "skipped",
+            lighthouse_status: hasSite ? "pending" : "skipped",
+            ai_status: "pending",
+            generation_status: this.opts.skipGeneration ? "skipped" : "pending",
             new_lighthouse_status: this.opts.skipEvaluation
               ? "skipped"
-              : stagePending,
-            new_ai_status: this.opts.skipEvaluation ? "skipped" : stagePending,
+              : "pending",
+            new_ai_status: this.opts.skipEvaluation ? "skipped" : "pending",
           });
           this.store.flush();
           this.emit({
@@ -249,13 +260,15 @@ export class Pipeline {
             total: totalCount,
             new: newCount,
           });
-          if (listing.website) {
+          if (hasSite) {
             this.readiness.set(key, {
               lighthouseDone: false,
               aiDone: false,
               paths,
             });
             this.scheduleProcessing(key, listing, paths);
+          } else {
+            this.scheduleInvent(key, listing, paths);
           }
         },
       },
@@ -315,6 +328,7 @@ export class Pipeline {
       briefPath: join(siteDir, "BRIEF.md"),
       oldSeoSnapshot: join(assetsDir, "seo-snapshot.json"),
       newSeoSnapshot: join(assetsDir, "new-seo-snapshot.json"),
+      brandKitPath: join(assetsDir, BRAND_KIT_FILENAME),
       hostname,
       slug,
       packageName: `@sites/${slug}`,
@@ -501,6 +515,9 @@ export class Pipeline {
           seo_summary: out.seo_summary,
           aeo_score: String(out.aeo_score),
           aeo_summary: out.aeo_summary,
+          brand_palette: paletteToCsv(out.palette),
+          brand_voice: joinList(out.voice),
+          brand_tagline: out.tagline,
         });
         await this.store.flush();
         this.emit({
@@ -542,6 +559,108 @@ export class Pipeline {
     }
   }
 
+  // Greenfield path: no existing site to crawl. We invent a brand
+  // (text-only Mistral call), render an SVG logo from the invented
+  // palette + initials, and push straight into generate. The Mistral
+  // call still flows through the strict 1-in-flight aiQ.
+  private scheduleInvent(
+    key: string,
+    listing: ScrapedListing,
+    paths: SitePaths,
+  ) {
+    if (this.opts.skipAi) {
+      // Without an AI call we can't invent anything; mark and bail.
+      this.store.upsert(key, {
+        ai_status: "skipped",
+        generation_status: "skipped",
+        new_lighthouse_status: "skipped",
+        new_ai_status: "skipped",
+      });
+      this.store.flush();
+      return;
+    }
+    this.aiQ.enqueue(async () => {
+      this.store.upsert(key, { ai_status: "running" });
+      this.emit({
+        type: "item",
+        key,
+        name: listing.name ?? "",
+        stage: "invent",
+        status: "start",
+      });
+      try {
+        const out = await inventBrand({
+          name: listing.name ?? "",
+          category: listing.category ?? "",
+          address: listing.address ?? "",
+          phone: listing.phone ?? "",
+          hours: listing.hours ?? "",
+          // The default mistral-large-latest is fine; if the user
+          // overrode --model to a vision model that's also OK because
+          // inventBrand only sends text parts.
+          model: this.opts.aiModel,
+        });
+
+        // Render and persist the SVG logo built from the invented
+        // palette + initials. Goes into .assets/logos/ so the brand
+        // kit picks it up like any other captured logo.
+        const logosDir = join(paths.assetsDir, "logos");
+        mkdirSync(logosDir, { recursive: true });
+        const svgPath = join(logosDir, "00-invented.svg");
+        const svg = buildInventedSvgLogo({
+          name: listing.name ?? "",
+          initials: out.logo_initials,
+          palette: out.palette,
+        });
+        writeFileSync(svgPath, svg, "utf8");
+
+        this.store.upsert(key, {
+          ai_status: "ok",
+          // Score columns intentionally left empty — there's no
+          // existing site to score. Consumers should treat empty
+          // scores as "not applicable" and look at brand_palette /
+          // brand_tagline / crawl_status=skipped to recognize the
+          // invented-brand case.
+          ai_features: joinList(out.features),
+          ai_summary: out.summary,
+          brand_palette: paletteToCsv(out.palette),
+          brand_voice: joinList(out.voice),
+          brand_tagline: out.tagline,
+          logo_paths: joinList([this.rel(svgPath)]),
+        });
+        await this.store.flush();
+        this.emit({
+          type: "item",
+          key,
+          name: listing.name ?? "",
+          stage: "invent",
+          status: "ok",
+          detail: out.tagline.slice(0, 60),
+        });
+
+        if (!this.opts.skipGeneration) this.scheduleGenerate(key, paths);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.store.upsert(key, {
+          ai_status: "error",
+          generation_status: "skipped",
+          new_lighthouse_status: "skipped",
+          new_ai_status: "skipped",
+          error: msg,
+        });
+        await this.store.flush();
+        this.emit({
+          type: "item",
+          key,
+          name: listing.name ?? "",
+          stage: "invent",
+          status: "error",
+          detail: msg,
+        });
+      }
+    });
+  }
+
   private scheduleGenerate(key: string, paths: SitePaths) {
     this.generateQ.enqueue(async () => {
       const rec = this.store.get(key);
@@ -563,6 +682,38 @@ export class Pipeline {
           .map((p) => p.trim())
           .filter(Boolean)
           .map((p) => resolve(this.opts.repoRoot, p));
+
+        // Build + persist the brand kit JSON so Claude Code can read
+        // it from .assets/brand-kit.json during the generation session.
+        let oldSnapshot: SeoSnapshot | null = null;
+        try {
+          oldSnapshot = JSON.parse(
+            readFileSync(paths.oldSeoSnapshot, "utf8"),
+          ) as SeoSnapshot;
+        } catch {
+          // No snapshot — kit will fall back to system fonts etc.
+        }
+        try {
+          const kit = buildBrandKit({
+            rec,
+            snapshot: oldSnapshot,
+            logoAbsPaths,
+            siteDir: paths.siteDir,
+          });
+          writeBrandKit(kit, paths.brandKitPath);
+          this.store.upsert(key, {
+            brand_kit_path: this.rel(paths.brandKitPath),
+          });
+        } catch (err) {
+          this.emit({
+            type: "log",
+            level: "warn",
+            message: `brand kit build failed: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          });
+        }
+
         const briefPath = writeBrief({
           siteDir: paths.siteDir,
           rec,
@@ -732,6 +883,35 @@ export class Pipeline {
             type: "log",
             level: "warn",
             message: `overlay install failed: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          });
+        }
+
+        // Publish the brand kit alongside the deployed site so
+        // <hostname>/brand-kit.html shows the captured palette,
+        // typography, voice, logos, and headlines for sales review.
+        try {
+          const finalRec = this.store.get(key);
+          if (finalRec) {
+            const logoAbsPaths = finalRec.logo_paths
+              .split(";")
+              .map((p) => p.trim())
+              .filter(Boolean)
+              .map((p) => resolve(this.opts.repoRoot, p));
+            const kit = buildBrandKit({
+              rec: finalRec,
+              snapshot: newSnapshot ?? null,
+              logoAbsPaths,
+              siteDir: paths.siteDir,
+            });
+            installBrandKit({ distDir, kit, logoAbsPaths });
+          }
+        } catch (err) {
+          this.emit({
+            type: "log",
+            level: "warn",
+            message: `brand kit publish failed: ${
               err instanceof Error ? err.message : String(err)
             }`,
           });

@@ -15,6 +15,18 @@ import { z } from "zod";
 // allows only 1 in-flight request on the free tier. The orchestrator
 // wraps every call in a concurrency=1 Queue.
 
+const PaletteEntry = z.object({
+  hex: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  role: z.enum([
+    "primary",
+    "secondary",
+    "accent",
+    "background",
+    "text",
+    "other",
+  ]),
+});
+
 const Assessment = z.object({
   design_score: z.number().min(1).max(10),
   quality_score: z.number().min(1).max(10),
@@ -24,9 +36,15 @@ const Assessment = z.object({
   seo_summary: z.string(),
   aeo_score: z.number().min(0).max(100),
   aeo_summary: z.string(),
+  // Brand-kit fields. Same call so we don't burn a second Mistral
+  // round trip just to ask "what colors are on this site?".
+  palette: z.array(PaletteEntry).max(6),
+  voice: z.array(z.string()).max(6),
+  tagline: z.string(),
 });
 
 export type Assessment = z.infer<typeof Assessment>;
+export type PaletteEntry = z.infer<typeof PaletteEntry>;
 
 const PROMPT = `You are a senior web auditor scoring a small-business
 website on behalf of a sales team. You receive a homepage screenshot,
@@ -89,6 +107,21 @@ explicit fact statements.
 
 - aeo_summary: 1-2 sentences describing AEO state and biggest gap.
 
+## Brand kit
+
+Pull a few brand-kit signals out of the same screenshot so we don't
+have to make a second model call:
+
+- palette: up to 6 colors visible on the page, each with a role.
+  hex must be 6-digit lowercase #rrggbb. Roles must be one of
+  primary, secondary, accent, background, text, other. Rank by
+  prominence — the primary brand color first.
+- voice: 3-5 short tone descriptors that fit the copy + design
+  ("warm", "authoritative", "playful", "technical", "minimal", etc.).
+- tagline: a one-line tagline candidate, derived from the page if
+  one exists, or written from the visible copy if none is present.
+  Prefer the existing tagline when there is one.
+
 Be honest. Most small business sites score 3-6 on design/quality,
 40-65 on SEO, 25-55 on AEO.`;
 
@@ -125,6 +158,94 @@ export async function assessSite(opts: AssessOptions): Promise<Assessment> {
     model: mistral(modelName),
     schema: Assessment,
     messages: [{ role: "user", content: userParts }],
+  });
+
+  return object;
+}
+
+// ---------------------------------------------------------------------------
+// inventBrand — used when a business has no existing site
+// ---------------------------------------------------------------------------
+//
+// Text-only call (no screenshot to feed) so we use mistral-large-latest
+// by default — it's the right tool for structured-output text without
+// vision. Still goes through the same serialized Mistral queue.
+
+const InventedBrand = z.object({
+  tagline: z.string(),
+  summary: z.string(),
+  voice: z.array(z.string()).max(6),
+  audience: z.string(),
+  palette: z.array(PaletteEntry).max(6),
+  features: z.array(z.string()),
+  logo_initials: z.string().max(3),
+  logo_concept: z.string(),
+});
+
+export type InventedBrand = z.infer<typeof InventedBrand>;
+
+const INVENT_PROMPT = `You are a brand strategist inventing a brand
+identity for a small business that has no existing website. Use the
+business's name, category, and address to ground the invention. Keep
+it tasteful and category-appropriate — a law firm should feel
+authoritative, a coffee shop should feel warm and approachable.
+
+Return:
+- tagline: a single short tagline (4-9 words).
+- summary: 2-3 sentences describing the brand identity in plain
+  language. Mention what they do, who they serve, and the feeling.
+- voice: 3-5 short tone words ("warm", "authoritative", "playful",
+  "minimal", "technical", etc.).
+- audience: a 1-sentence description of the primary customer.
+- palette: 4-6 colors with role assignments. hex must be lowercase
+  #rrggbb; role must be one of primary, secondary, accent,
+  background, text, other. Pick a palette that fits the category and
+  reads accessibly when used at typical web contrast ratios — pair a
+  dark text color with a light background or vice versa.
+- features: 4-8 short feature tags this kind of business should
+  surface on a marketing site (e.g. "menu", "online_ordering",
+  "booking", "contact_form", "hours", "directions", "testimonials",
+  "gallery", "service_list", "pricing", "blog").
+- logo_initials: 1-3 uppercase letters to use as a monogram.
+  Use the most recognizable initials from the business name (skip
+  filler words like "The", "of", "and"). Examples: "Acme Coffee Co"
+  → "AC"; "The Daily Grind" → "DG"; "Smith & Sons Plumbing" → "SS".
+- logo_concept: 1 sentence describing the visual concept (color
+  pairing, monogram style, mood). The pipeline renders the actual
+  SVG; this is just narrative for the brief.`;
+
+export interface InventOptions {
+  name: string;
+  category: string;
+  address: string;
+  phone: string;
+  hours: string;
+  model?: string;
+}
+
+export async function inventBrand(opts: InventOptions): Promise<InventedBrand> {
+  const modelName = opts.model ?? "mistral-large-latest";
+
+  const profile = [
+    `Business name: ${opts.name}`,
+    `Category: ${opts.category || "(unspecified)"}`,
+    `Address: ${opts.address || "(unknown)"}`,
+    `Phone: ${opts.phone || "(unknown)"}`,
+    `Hours: ${opts.hours || "(unknown)"}`,
+  ].join("\n");
+
+  const { object } = await generateObject({
+    model: mistral(modelName),
+    schema: InventedBrand,
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: INVENT_PROMPT },
+          { type: "text", text: `## Business profile\n${profile}` },
+        ],
+      },
+    ],
   });
 
   return object;

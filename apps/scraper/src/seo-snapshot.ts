@@ -42,6 +42,10 @@ export interface SeoSnapshot {
   scriptCount: number;
   textLength: number;
   https: boolean;
+  // Computed font-family stacks pulled from the rendered DOM. Used by
+  // the brand kit; not strictly an SEO signal but cheap to capture in
+  // the same evaluate pass.
+  fonts: { heading: string; body: string };
 }
 
 export async function extractSeoSnapshot(page: Page): Promise<SeoSnapshot> {
@@ -97,6 +101,21 @@ export async function extractSeoSnapshot(page: Page): Promise<SeoSnapshot> {
 
     const text = document.body?.innerText ?? "";
 
+    const computedFamily = (sel: string): string => {
+      const el = document.querySelector(sel);
+      if (!el) return "";
+      const f = window.getComputedStyle(el).fontFamily ?? "";
+      return f.replace(/\s+/g, " ").trim();
+    };
+    const fonts = {
+      heading:
+        computedFamily("h1") ||
+        computedFamily("h2") ||
+        computedFamily("h3") ||
+        "",
+      body: computedFamily("body") || computedFamily("p") || "",
+    };
+
     return {
       title: document.title ?? "",
       description: meta('meta[name="description"]'),
@@ -145,6 +164,7 @@ export async function extractSeoSnapshot(page: Page): Promise<SeoSnapshot> {
         ).length > 0,
       scriptCount: document.querySelectorAll("script").length,
       textLength: text.length,
+      fonts,
     };
   });
 
@@ -176,6 +196,7 @@ export function snapshotToPrompt(s: SeoSnapshot): string {
     `Has FAQ-style content: ${s.hasFaq}`,
     `Has contact link (mailto/tel): ${s.hasContactInfo}`,
     `Body text length: ${s.textLength} chars, scripts: ${s.scriptCount}`,
+    `Fonts: heading=${q(s.fonts.heading)} body=${q(s.fonts.body)}`,
   ];
   return lines.join("\n");
 }

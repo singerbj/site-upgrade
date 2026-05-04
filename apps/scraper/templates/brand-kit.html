@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Brand kit</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f8f9fb;
+        --card: #ffffff;
+        --ink: #0b0b10;
+        --muted: #5b6478;
+        --line: #e6e9ef;
+        --accent: #6366f1;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0b0b10;
+          --card: #15161d;
+          --ink: #f3f4f6;
+          --muted: #9ca3af;
+          --line: rgba(255, 255, 255, 0.08);
+          --accent: #a78bfa;
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; }
+      body {
+        font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        padding: 32px 16px 64px;
+      }
+      .wrap { max-width: 920px; margin: 0 auto; }
+      header.kit-head {
+        display: flex; align-items: baseline; gap: 16px;
+        flex-wrap: wrap;
+        padding-bottom: 24px; border-bottom: 1px solid var(--line);
+      }
+      header.kit-head h1 {
+        margin: 0;
+        font-size: 28px; font-weight: 700; letter-spacing: -0.01em;
+      }
+      header.kit-head .tagline {
+        color: var(--muted); font-style: italic;
+      }
+      header.kit-head .badge {
+        display: inline-block;
+        font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+        text-transform: uppercase;
+        background: var(--accent); color: #fff;
+        padding: 3px 8px; border-radius: 6px;
+      }
+      section.card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 20px 22px;
+        margin-top: 20px;
+      }
+      section.card h2 {
+        margin: 0 0 14px;
+        font-size: 13px; font-weight: 600; letter-spacing: 0.04em;
+        text-transform: uppercase; color: var(--muted);
+      }
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px 24px;
+      }
+      .kv { display: flex; flex-direction: column; gap: 2px; }
+      .kv .k { color: var(--muted); font-size: 12px; }
+      .kv .v { font-size: 14px; word-break: break-word; }
+      .palette { display: flex; flex-wrap: wrap; gap: 12px; }
+      .swatch {
+        width: 120px; border-radius: 10px; overflow: hidden;
+        border: 1px solid var(--line);
+        background: var(--card);
+      }
+      .swatch .chip { height: 70px; }
+      .swatch .meta { padding: 8px 10px; font-size: 12px; }
+      .swatch .role {
+        display: block; color: var(--muted); margin-bottom: 2px;
+        text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; font-weight: 600;
+      }
+      .swatch .hex { font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+      .voice-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+      .voice-tags span {
+        background: var(--line); color: var(--ink);
+        padding: 4px 10px; border-radius: 999px;
+        font-size: 12px; font-weight: 500;
+      }
+      .type-sample {
+        padding: 18px 20px; border: 1px solid var(--line);
+        border-radius: 10px; background: var(--bg);
+      }
+      .type-sample .label {
+        font-size: 11px; color: var(--muted);
+        text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .type-sample .h-sample { font-size: 28px; font-weight: 700; line-height: 1.2; }
+      .type-sample .b-sample { font-size: 15px; line-height: 1.55; margin-top: 6px; }
+      .logos {
+        display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+      }
+      .logo {
+        background: #fff; border: 1px solid var(--line); border-radius: 10px;
+        padding: 10px; height: 80px; display: flex; align-items: center; justify-content: center;
+        min-width: 120px;
+      }
+      .logo img { max-height: 60px; max-width: 200px; }
+      .headlines li { margin: 6px 0; }
+      .footer {
+        margin-top: 32px; color: var(--muted); font-size: 12px;
+      }
+      .footer a { color: var(--accent); }
+      .empty { color: var(--muted); font-style: italic; }
+      details.raw {
+        margin-top: 18px; color: var(--muted); font-size: 12px;
+      }
+      details.raw pre {
+        background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+        padding: 12px; overflow: auto; font-size: 11px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="kit-head">
+        <h1 id="biz-name">Brand kit</h1>
+        <span class="badge" id="biz-category"></span>
+        <span class="tagline" id="biz-tagline"></span>
+      </header>
+
+      <section class="card">
+        <h2>Identity</h2>
+        <div class="grid-2" id="identity-grid"></div>
+        <p id="identity-summary" style="margin-top: 14px; color: var(--muted)"></p>
+        <div class="voice-tags" id="voice-tags" style="margin-top: 12px"></div>
+      </section>
+
+      <section class="card">
+        <h2>Color palette</h2>
+        <div class="palette" id="palette"></div>
+      </section>
+
+      <section class="card">
+        <h2>Typography</h2>
+        <div class="grid-2">
+          <div class="type-sample" id="heading-sample">
+            <div class="label">Heading</div>
+            <div class="h-sample">The quick brown fox</div>
+            <div class="meta" style="font-size: 12px; color: var(--muted); margin-top: 8px;" id="heading-family"></div>
+          </div>
+          <div class="type-sample" id="body-sample">
+            <div class="label">Body</div>
+            <div class="b-sample">The quick brown fox jumps over the lazy dog. 0123456789.</div>
+            <div class="meta" style="font-size: 12px; color: var(--muted); margin-top: 8px;" id="body-family"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Logos</h2>
+        <div class="logos" id="logos"></div>
+      </section>
+
+      <section class="card">
+        <h2>Headlines</h2>
+        <ul class="headlines" id="headlines"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Features detected</h2>
+        <div class="voice-tags" id="features"></div>
+      </section>
+
+      <details class="raw">
+        <summary>Raw brand-kit.json</summary>
+        <pre id="raw"></pre>
+      </details>
+
+      <p class="footer">
+        Captured by site-upgrade. <span id="src"></span>
+      </p>
+    </div>
+    <script>
+      (async () => {
+        const $ = (id) => document.getElementById(id);
+        const txt = (el, v) => { if (el) el.textContent = v ?? ""; };
+        const empty = (el, msg) => {
+          if (!el) return;
+          el.innerHTML = '<span class="empty">' + msg + '</span>';
+        };
+        const escape = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({
+          "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;",
+        }[c]));
+
+        let kit;
+        try {
+          const r = await fetch("/brand-kit.json", { cache: "no-store" });
+          if (!r.ok) throw new Error("fetch failed: " + r.status);
+          kit = await r.json();
+        } catch (e) {
+          document.body.innerHTML = '<div class="wrap"><h1>Brand kit unavailable</h1>' +
+            '<p>Could not load <code>/brand-kit.json</code>: ' + escape(e.message || e) + '</p></div>';
+          return;
+        }
+
+        const b = kit.business || {};
+        document.title = "Brand kit — " + (b.name || "");
+        txt($("biz-name"), b.name || "Brand kit");
+        txt($("biz-category"), b.category || "");
+        txt($("biz-tagline"), b.tagline ? '"' + b.tagline + '"' : "");
+
+        // Identity grid
+        const ig = $("identity-grid");
+        const kvs = [
+          ["Address", b.address],
+          ["Phone", b.phone],
+          ["Hours", b.hours],
+          ["Website", b.website ? '<a href="' + escape(b.website) + '" target="_blank" rel="noopener">' + escape(b.website) + '</a>' : ""],
+          ["Emails", (b.emails || []).join(", ")],
+          ["Hostname", b.hostname],
+        ];
+        ig.innerHTML = kvs
+          .filter(([, v]) => v)
+          .map(([k, v]) => '<div class="kv"><span class="k">' + escape(k) + '</span><span class="v">' + (k === "Website" ? v : escape(v)) + '</span></div>')
+          .join("");
+        txt($("identity-summary"), (kit.identity && kit.identity.summary) || "");
+
+        const voice = (kit.identity && kit.identity.voice) || [];
+        const vt = $("voice-tags");
+        if (voice.length === 0) empty(vt, "No tone descriptors captured.");
+        else vt.innerHTML = voice.map((t) => "<span>" + escape(t) + "</span>").join("");
+
+        // Palette
+        const pal = (kit.colors && kit.colors.palette) || [];
+        const palEl = $("palette");
+        if (pal.length === 0) empty(palEl, "No palette captured.");
+        else palEl.innerHTML = pal.map((p) =>
+          '<div class="swatch">' +
+            '<div class="chip" style="background: ' + escape(p.hex) + '"></div>' +
+            '<div class="meta">' +
+              '<span class="role">' + escape(p.role) + '</span>' +
+              '<span class="hex">' + escape(p.hex) + '</span>' +
+            '</div>' +
+          '</div>',
+        ).join("");
+
+        // Typography
+        const t = kit.typography || { heading: {}, body: {} };
+        const headingFamily = [t.heading.family, ...(t.heading.fallbacks || [])].filter(Boolean).join(", ");
+        const bodyFamily = [t.body.family, ...(t.body.fallbacks || [])].filter(Boolean).join(", ");
+        if (headingFamily) {
+          const el = $("heading-sample").querySelector(".h-sample");
+          if (el) el.style.fontFamily = headingFamily;
+          txt($("heading-family"), headingFamily);
+        }
+        if (bodyFamily) {
+          const el = $("body-sample").querySelector(".b-sample");
+          if (el) el.style.fontFamily = bodyFamily;
+          txt($("body-family"), bodyFamily);
+        }
+
+        // Logos
+        const logosEl = $("logos");
+        const logos = kit.logos || [];
+        if (logos.length === 0) empty(logosEl, "No logos extracted.");
+        else logosEl.innerHTML = logos.map((l) =>
+          '<div class="logo" title="' + escape(l.hint || "") + (l.primary ? " (primary)" : "") + '">' +
+            '<img src="' + escape(l.path) + '" alt="' + escape(l.hint || "logo") + '" />' +
+          '</div>',
+        ).join("");
+
+        // Headlines
+        const heads = (kit.copy && kit.copy.headlines) || [];
+        const hEl = $("headlines");
+        if (heads.length === 0) empty(hEl, "No headlines captured.");
+        else hEl.innerHTML = heads.map((h) => "<li>" + escape(h) + "</li>").join("");
+
+        // Features
+        const feats = kit.features || [];
+        const fEl = $("features");
+        if (feats.length === 0) empty(fEl, "No features detected.");
+        else fEl.innerHTML = feats.map((f) => "<span>" + escape(f) + "</span>").join("");
+
+        // Source line
+        const src = kit.sources || {};
+        if (src.captured_from) {
+          $("src").innerHTML = "Source: <a href=\"" + escape(src.captured_from) + "\" target=\"_blank\" rel=\"noopener\">" + escape(src.captured_from) + "</a>" +
+            (src.captured_at ? " — captured " + escape(src.captured_at) : "");
+        }
+
+        $("raw").textContent = JSON.stringify(kit, null, 2);
+      })();
+    </script>
+  </body>
+</html>

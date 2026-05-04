@@ -8,11 +8,14 @@ import { type PhaseEvent, Pipeline } from "./pipeline.ts";
 import type { QueueStats } from "./queue.ts";
 
 // CLI surface
-//   scraper --query="dentists in Austin TX" [--max=40] [--headful]
+//   scraper --query="dentists in Austin TX" [--places=40] [--headful]
 //          [--apex=example.com] [--no-lighthouse] [--no-ai]
 //          [--no-generation] [--no-evaluation]
 //          [--gen-concurrency=1] [--model=pixtral-large-latest]
 //          [--csv=path] [--claude-bin=claude]
+//
+// `--places` is the primary flag for "how many businesses to pull from
+// Google Maps"; `--max` is kept as a back-compat alias.
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => {
     const [k, ...v] = a.replace(/^--/, "").split("=");
@@ -21,11 +24,17 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => {
 
 if (!args.query || args.query === "true") {
   console.error(
-    'Usage: scraper --query="dentists in Austin TX" [--max=40] [--apex=example.com]\n' +
+    'Usage: scraper --query="dentists in Austin TX" [--places=40] [--apex=example.com]\n' +
       "         [--headful] [--no-lighthouse] [--no-ai] [--no-generation] [--no-evaluation]\n" +
       "         [--gen-concurrency=1] [--model=pixtral-large-latest] [--csv=path] [--claude-bin=claude]",
   );
   process.exit(1);
+}
+
+function intOrUndef(v: string | undefined): number | undefined {
+  if (!v || v === "true") return undefined;
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -38,7 +47,8 @@ const csvPath = args.csv
 
 const opts = {
   query: args.query,
-  maxResults: args.max ? Number.parseInt(args.max, 10) : 40,
+  // --places is the canonical name; --max is kept as an alias.
+  maxResults: intOrUndef(args.places) ?? intOrUndef(args.max) ?? 40,
   csvPath,
   repoRoot: REPO_ROOT,
   apex: args.apex && args.apex !== "true" ? args.apex : "example.com",
@@ -47,9 +57,7 @@ const opts = {
   skipAi: args["no-ai"] === "true",
   skipGeneration: args["no-generation"] === "true",
   skipEvaluation: args["no-evaluation"] === "true",
-  generateConcurrency: args["gen-concurrency"]
-    ? Number.parseInt(args["gen-concurrency"], 10)
-    : 1,
+  generateConcurrency: intOrUndef(args["gen-concurrency"]) ?? 1,
   aiModel: args.model,
   claudeBin: args["claude-bin"],
 };
